@@ -818,7 +818,7 @@ def analyze_eks_nodegroups(all_findings, nodegroups, cluster_name, region):
         # Basic info - useful context
         ami_type = ng.get('amiType')
         version_info = ng.get('releaseVersion')
-        instance_types = ng.get('instanceTypes')
+        instance_types = ng.get('instanceTypes', [])
         add_finding(all_findings, SEVERITY_INFO, "Nodegroup Configuration Info",
                     f"Nodegroup '{ng_name}': AMI Type '{ami_type}', Version '{version_info}', Instances '{','.join(instance_types)}', Node Role '{node_role_arn.split('/')[-1]}'.",
                     "Informational finding detailing the nodegroup configuration.",
