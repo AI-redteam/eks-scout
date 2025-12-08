@@ -22,14 +22,28 @@ asci_1 = '''
 
 print(asci_1)
 
-# --- Configuration ---
-SEVERITY_CRITICAL = "Critical"
-SEVERITY_HIGH = "High"
-SEVERITY_MEDIUM = "Medium"
-SEVERITY_LOW = "Low"
-SEVERITY_INFO = "Informational"
+# Try importing new modular structure, fall back to inline code if not available
+try:
+    from eks_scout.config import Config, set_config, SEVERITY_CRITICAL, SEVERITY_HIGH, SEVERITY_MEDIUM, SEVERITY_LOW, SEVERITY_INFO
+    from eks_scout.core.command import run_cmd as run_cmd_modular
+    from eks_scout.core.findings import FindingManager
+    from eks_scout.core.fetchers import KubernetesResourceFetcher, AWSResourceFetcher
+    MODULAR_MODE = True
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    logging.info("Running in MODULAR mode (new architecture)")
+except ImportError as e:
+    MODULAR_MODE = False
+    # Use inline implementations below
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    logging.info("Running in INLINE mode (legacy architecture)")
+    logging.debug(f"Modular imports failed: {e}")
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    # --- Configuration ---
+    SEVERITY_CRITICAL = "Critical"
+    SEVERITY_HIGH = "High"
+    SEVERITY_MEDIUM = "Medium"
+    SEVERITY_LOW = "Low"
+    SEVERITY_INFO = "Informational"
 
 # --- Helper Functions ---
 
@@ -981,6 +995,58 @@ def export_findings_to_csv(findings, filename="eks_findings_plextrac.csv"):
 
 # --- Main Execution ---
 
+def run_modular_scan(args):
+    """Execute scan using new modular architecture."""
+    # Load configuration if provided
+    config = Config(args.config) if hasattr(args, 'config') and args.config else Config()
+    set_config(config)
+
+    # Initialize finding manager
+    finding_manager = FindingManager()
+
+    # Fetch all resources using new fetchers (with parallel execution)
+    logging.info("--- Fetching Kubernetes Resources (Parallel) ---")
+    k8s_fetcher = KubernetesResourceFetcher(context=args.context)
+    k8s_resources = k8s_fetcher.fetch_all()
+
+    logging.info("--- Fetching AWS EKS Resources ---")
+    aws_fetcher = AWSResourceFetcher(profile=args.profile, region=args.region)
+    aws_resources = aws_fetcher.fetch_all(args.cluster_name)
+
+    # Combine resources for analysis
+    all_resources = {
+        **k8s_resources,
+        **aws_resources,
+        'cluster_name': args.cluster_name,
+        'region': args.region,
+        'profile': args.profile
+    }
+
+    # For now, use existing inline analysis functions
+    # (Will be replaced with check registry in Phase 2)
+    logging.info("--- Analyzing Resources (using legacy analysis functions) ---")
+    all_findings = []
+
+    # Use modular command execution for fetching if needed
+    # But for now, resources are already fetched
+    # Call existing analysis functions with fetched resources
+    analyze_eks_cluster_config(all_findings, aws_resources.get('cluster_info'), args.cluster_name, args.region)
+    analyze_eks_nodegroups(all_findings, aws_resources.get('nodegroups', []), args.cluster_name, args.region)
+    analyze_namespaces(all_findings, k8s_resources.get('namespaces', []),
+                      k8s_resources.get('resource_quotas', []),
+                      k8s_resources.get('limit_ranges', []))
+    analyze_pods(all_findings, k8s_resources.get('pods', []))
+    analyze_serviceaccounts(all_findings, k8s_resources.get('service_accounts', []))
+    analyze_rbac(all_findings, k8s_resources.get('roles', []), k8s_resources.get('role_bindings', []),
+                k8s_resources.get('cluster_roles', []), k8s_resources.get('cluster_role_bindings', []))
+    analyze_network_policies(all_findings, k8s_resources.get('network_policies_by_ns', {}),
+                            k8s_resources.get('namespaces', []))
+    analyze_network_exposure(all_findings, k8s_resources.get('services', []), k8s_resources.get('ingresses', []))
+    analyze_secrets_configmaps(all_findings, k8s_resources.get('secrets', []), k8s_resources.get('configmaps', []))
+
+    return all_findings
+
+
 def main():
     parser = argparse.ArgumentParser(description="AWS EKS Security Scanner (Read-Only)")
     parser.add_argument("--cluster-name", required=True, help="Name of the EKS cluster")
@@ -988,7 +1054,8 @@ def main():
     parser.add_argument("--profile", help="AWS CLI profile to use")
     parser.add_argument("--context", help="kubectl context to use")
     parser.add_argument("-o", "--output-file", default="eks_findings_plextrac.csv", help="Output CSV file name")
-    parser.add_argument("-f", "--output-format", choices=['csv', 'json'], default='csv', help="Output format (csv or json)") # NEW: Output format
+    parser.add_argument("-f", "--output-format", choices=['csv', 'json'], default='csv', help="Output format (csv or json)")
+    parser.add_argument("--config", help="Path to configuration file (YAML or JSON)")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
 
     args = parser.parse_args()
@@ -996,76 +1063,83 @@ def main():
     if args.debug:
         logging.getLogger().setLevel(logging.DEBUG)
 
-    all_findings = []
     start_time = datetime.now()
     logging.info(f"Starting AWS EKS Security Scanner for cluster '{args.cluster_name}' in region '{args.region}'...")
     logging.info(f"Using AWS Profile: '{args.profile or 'default'}' | Using kubectl Context: '{args.context or 'default'}'")
     logging.info("NOTE: This script uses read-only kubectl and aws cli commands.")
 
-    # Basic check for dependencies (pass profile/context here too)
-    logging.info("Checking dependencies...")
-    if run_cmd("kubectl version --client --short", context=args.context, check_rc=False, suppress_error=True) is None:
-        logging.error(f"kubectl command not found or not working (context: {args.context or 'default'}). Please install and configure kubectl.")
-        sys.exit(1)
-    if run_cmd("aws sts get-caller-identity", profile=args.profile, check_rc=False, suppress_error=True) is None:
-         logging.error(f"AWS CLI command not found or not working/authenticated (profile: {args.profile or 'default'}). Please install/configure AWS CLI.")
-         sys.exit(1)
-    logging.info("Dependencies check passed.")
+    # Route to appropriate execution path
+    if MODULAR_MODE:
+        # Use new modular architecture
+        all_findings = run_modular_scan(args)
+    else:
+        # Use legacy inline code
+        all_findings = []
+
+        # Basic check for dependencies (pass profile/context here too)
+        logging.info("Checking dependencies...")
+        if run_cmd("kubectl version --client --short", context=args.context, check_rc=False, suppress_error=True) is None:
+            logging.error(f"kubectl command not found or not working (context: {args.context or 'default'}). Please install and configure kubectl.")
+            sys.exit(1)
+        if run_cmd("aws sts get-caller-identity", profile=args.profile, check_rc=False, suppress_error=True) is None:
+             logging.error(f"AWS CLI command not found or not working/authenticated (profile: {args.profile or 'default'}). Please install/configure AWS CLI.")
+             sys.exit(1)
+        logging.info("Dependencies check passed.")
 
 
-    # 1. Fetch AWS EKS Data (pass profile)
-    logging.info("--- Fetching AWS EKS Data ---")
-    eks_cluster_info = get_aws_eks_cluster_info(args.cluster_name, args.region, profile=args.profile)
-    eks_nodegroups = get_aws_eks_nodegroups(args.cluster_name, args.region, profile=args.profile)
-    # TODO: Add EKS Addon fetching: aws eks list-addons, describe-addon
+        # 1. Fetch AWS EKS Data (pass profile)
+        logging.info("--- Fetching AWS EKS Data ---")
+        eks_cluster_info = get_aws_eks_cluster_info(args.cluster_name, args.region, profile=args.profile)
+        eks_nodegroups = get_aws_eks_nodegroups(args.cluster_name, args.region, profile=args.profile)
+        # TODO: Add EKS Addon fetching: aws eks list-addons, describe-addon
 
-    # 2. Fetch Kubernetes Resources (Efficiently) (pass context)
-    logging.info("--- Fetching Kubernetes Resources ---")
-    # Combining some fetches for efficiency where possible
-    namespaces = get_k8s_resources("namespaces", context=args.context)
-    pods = get_k8s_resources("pods", context=args.context, use_all_namespaces=True)
-    service_accounts = get_k8s_resources("serviceaccounts", context=args.context, use_all_namespaces=True)
-    # Fetch RBAC resources
-    roles = get_k8s_resources("roles", context=args.context, use_all_namespaces=True)
-    role_bindings = get_k8s_resources("rolebindings", context=args.context, use_all_namespaces=True)
-    cluster_roles = get_k8s_resources("clusterroles", context=args.context)
-    cluster_role_bindings = get_k8s_resources("clusterrolebindings", context=args.context)
-    # Fetch Network related resources
-    network_policies_all = get_k8s_resources("networkpolicy", context=args.context, use_all_namespaces=True)
-    services = get_k8s_resources("services", context=args.context, use_all_namespaces=True) # Renamed from svc
-    ingresses = get_k8s_resources("ingresses", context=args.context, use_all_namespaces=True) # Renamed from ing
-    # Fetch Config resources
-    secrets = get_k8s_resources("secrets", context=args.context, use_all_namespaces=True)
-    configmaps = get_k8s_resources("configmaps", context=args.context, use_all_namespaces=True)
-    # Fetch Resource Management resources
-    # Using the map return structure here
-    res_mgmt_resources = get_k8s_resources("resourcequota,limitrange", context=args.context, use_all_namespaces=True)
-    resource_quotas = res_mgmt_resources.get("ResourceQuota", [])
-    limit_ranges = res_mgmt_resources.get("LimitRange", [])
+        # 2. Fetch Kubernetes Resources (Efficiently) (pass context)
+        logging.info("--- Fetching Kubernetes Resources ---")
+        # Combining some fetches for efficiency where possible
+        namespaces = get_k8s_resources("namespaces", context=args.context)
+        pods = get_k8s_resources("pods", context=args.context, use_all_namespaces=True)
+        service_accounts = get_k8s_resources("serviceaccounts", context=args.context, use_all_namespaces=True)
+        # Fetch RBAC resources
+        roles = get_k8s_resources("roles", context=args.context, use_all_namespaces=True)
+        role_bindings = get_k8s_resources("rolebindings", context=args.context, use_all_namespaces=True)
+        cluster_roles = get_k8s_resources("clusterroles", context=args.context)
+        cluster_role_bindings = get_k8s_resources("clusterrolebindings", context=args.context)
+        # Fetch Network related resources
+        network_policies_all = get_k8s_resources("networkpolicy", context=args.context, use_all_namespaces=True)
+        services = get_k8s_resources("services", context=args.context, use_all_namespaces=True) # Renamed from svc
+        ingresses = get_k8s_resources("ingresses", context=args.context, use_all_namespaces=True) # Renamed from ing
+        # Fetch Config resources
+        secrets = get_k8s_resources("secrets", context=args.context, use_all_namespaces=True)
+        configmaps = get_k8s_resources("configmaps", context=args.context, use_all_namespaces=True)
+        # Fetch Resource Management resources
+        # Using the map return structure here
+        res_mgmt_resources = get_k8s_resources("resourcequota,limitrange", context=args.context, use_all_namespaces=True)
+        resource_quotas = res_mgmt_resources.get("ResourceQuota", [])
+        limit_ranges = res_mgmt_resources.get("LimitRange", [])
 
-    # Pre-process network policies by namespace for easier lookup
-    network_policies_by_ns = {}
-    for np in network_policies_all:
-        ns = np.get('metadata', {}).get('namespace')
-        if ns:
-            if ns not in network_policies_by_ns:
-                network_policies_by_ns[ns] = []
-            network_policies_by_ns[ns].append(np)
+        # Pre-process network policies by namespace for easier lookup
+        network_policies_by_ns = {}
+        for np in network_policies_all:
+            ns = np.get('metadata', {}).get('namespace')
+            if ns:
+                if ns not in network_policies_by_ns:
+                    network_policies_by_ns[ns] = []
+                network_policies_by_ns[ns].append(np)
 
-    # 3. Run Analysis Functions
-    logging.info("--- Analyzing Resources ---")
-    analyze_eks_cluster_config(all_findings, eks_cluster_info, args.cluster_name, args.region)
-    analyze_eks_nodegroups(all_findings, eks_nodegroups, args.cluster_name, args.region)
-    # Pass quota/limit data to namespace analysis
-    analyze_namespaces(all_findings, namespaces, resource_quotas, limit_ranges)
-    analyze_pods(all_findings, pods)
-    analyze_serviceaccounts(all_findings, service_accounts)
-    analyze_rbac(all_findings, roles, role_bindings, cluster_roles, cluster_role_bindings)
-    analyze_network_policies(all_findings, network_policies_by_ns, namespaces)
-    # NEW: Call network exposure analysis
-    analyze_network_exposure(all_findings, services, ingresses)
-    analyze_secrets_configmaps(all_findings, secrets, configmaps)
-    # TODO: Add call to analyze EKS Addons
+        # 3. Run Analysis Functions
+        logging.info("--- Analyzing Resources ---")
+        analyze_eks_cluster_config(all_findings, eks_cluster_info, args.cluster_name, args.region)
+        analyze_eks_nodegroups(all_findings, eks_nodegroups, args.cluster_name, args.region)
+        # Pass quota/limit data to namespace analysis
+        analyze_namespaces(all_findings, namespaces, resource_quotas, limit_ranges)
+        analyze_pods(all_findings, pods)
+        analyze_serviceaccounts(all_findings, service_accounts)
+        analyze_rbac(all_findings, roles, role_bindings, cluster_roles, cluster_role_bindings)
+        analyze_network_policies(all_findings, network_policies_by_ns, namespaces)
+        # NEW: Call network exposure analysis
+        analyze_network_exposure(all_findings, services, ingresses)
+        analyze_secrets_configmaps(all_findings, secrets, configmaps)
+        # TODO: Add call to analyze EKS Addons
 
     # 4. Report Findings
     logging.info("--- Scan Complete ---")
