@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "eks-scout"
+version = "2.0.0"
+description = "Passive security scanner for AWS EKS environments"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.8"
+dependencies = []
+
+[project.optional-dependencies]
+yaml = ["pyyaml>=6.0"]
+
+[project.scripts]
+eks-scout = "eks_scout.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["eks_scout*"]

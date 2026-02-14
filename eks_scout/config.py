@@ -2,7 +2,8 @@
 import os
 import json
 import logging
-from typing import Dict, Any, Optional
+import re
+from typing import Dict, Any, List, Optional
 
 # Severity level constants
 SEVERITY_CRITICAL = "Critical"
@@ -60,11 +61,12 @@ class Config:
         self.checks_enabled: Dict[str, bool] = {}
         self.severity_overrides: Dict[str, str] = {}
         self.custom_settings: Dict[str, Any] = {}
+        self.suppressions: List[Dict[str, Any]] = []
 
+        # Always load defaults first, then overlay with config file
+        self._load_defaults()
         if config_file and os.path.exists(config_file):
             self._load_config(config_file)
-        else:
-            self._load_defaults()
 
     def _load_defaults(self):
         """Load default configuration (all checks enabled)."""
@@ -133,20 +135,23 @@ class Config:
                         else:
                             raise ValueError(f"Could not parse config file '{config_file}' as JSON or YAML")
 
-            # Load configuration sections
-            self.checks_enabled = config_data.get('checks', {})
-            self.severity_overrides = config_data.get('severity_overrides', {})
-            self.custom_settings = config_data.get('settings', {})
-
-            # Merge custom settings with defaults
-            self._load_defaults()  # Load defaults first
-            # Then override with custom settings
+            # Overlay config file values on top of defaults
+            if config_data.get('checks'):
+                self.checks_enabled.update(config_data['checks'])
+            if config_data.get('severity_overrides'):
+                self.severity_overrides.update(config_data['severity_overrides'])
             if config_data.get('settings'):
                 self.custom_settings.update(config_data['settings'])
+
+            # Load suppressions (list of rule dicts)
+            raw_suppressions = config_data.get('suppressions', [])
+            if raw_suppressions:
+                self.suppressions = self._compile_suppressions(raw_suppressions)
 
             logging.info(f"Loaded configuration from {config_file}")
             logging.debug(f"Enabled checks: {len([k for k, v in self.checks_enabled.items() if v and k != '*'])}")
             logging.debug(f"Severity overrides: {len(self.severity_overrides)}")
+            logging.debug(f"Suppression rules: {len(self.suppressions)}")
 
         except FileNotFoundError:
             logging.warning(f"Config file not found: {config_file}. Using defaults.")
@@ -198,6 +203,51 @@ class Config:
             Setting value or default
         """
         return self.custom_settings.get(key, default)
+
+    def get_suppressions(self) -> List[Dict[str, Any]]:
+        """Get compiled suppression rules.
+
+        Returns:
+            List of suppression rule dicts, each with optional keys:
+            type, namespace, name_pattern (compiled regex), labels, reason.
+        """
+        return self.suppressions
+
+    def _compile_suppressions(self, raw_rules: List[Dict]) -> List[Dict[str, Any]]:
+        """Compile suppression rules, pre-compiling regex patterns.
+
+        Args:
+            raw_rules: List of raw suppression rule dicts from config.
+
+        Returns:
+            List of compiled suppression rules.
+        """
+        compiled = []
+        for i, rule in enumerate(raw_rules):
+            if not isinstance(rule, dict):
+                logging.warning(f"Suppression rule #{i+1} is not a dict, skipping.")
+                continue
+
+            compiled_rule = {
+                'reason': rule.get('reason', 'No reason provided'),
+            }
+
+            if 'type' in rule:
+                compiled_rule['type'] = rule['type']
+            if 'namespace' in rule:
+                compiled_rule['namespace'] = rule['namespace']
+            if 'name' in rule:
+                try:
+                    compiled_rule['name_pattern'] = re.compile(rule['name'])
+                except re.error as e:
+                    logging.warning(f"Suppression rule #{i+1} has invalid regex '{rule['name']}': {e}")
+                    continue
+            if 'labels' in rule and isinstance(rule['labels'], dict):
+                compiled_rule['labels'] = rule['labels']
+
+            compiled.append(compiled_rule)
+
+        return compiled
 
 
 # Global config instance (will be initialized in main())
