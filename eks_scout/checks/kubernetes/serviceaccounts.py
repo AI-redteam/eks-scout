@@ -37,11 +37,13 @@ def run(findings, resources, config=None):
                 add_finding(findings, SEVERITY_HIGH, "Service Account IRSA Role Potentially Overly Permissive",
                             f"ServiceAccount '{name}' in namespace '{ns}' uses IAM role '{iam_role_arn}' which might have excessive permissions (contains 'admin' or '*').",
                             "Review and apply least privilege to the IAM role associated via IRSA.",
-                            "CIS 5.1.5", ns, name, "ServiceAccount")
+                            "CIS 5.1.5", ns, name, "ServiceAccount",
+                            check_id="k8s.serviceaccounts.irsa-overly-permissive")
             add_finding(findings, SEVERITY_INFO, "Service Account Using IRSA",
                         f"ServiceAccount '{name}' in namespace '{ns}' uses IAM role via IRSA: {iam_role_arn}",
                         "Ensure the associated IAM role follows the principle of least privilege.",
-                        "AWS Best Practice", ns, name, "ServiceAccount")
+                        "AWS Best Practice", ns, name, "ServiceAccount",
+                        check_id="k8s.serviceaccounts.irsa")
 
         # Token Automounting
         automount_token = sa.get('automountServiceAccountToken')
@@ -50,9 +52,11 @@ def run(findings, resources, config=None):
                 add_finding(findings, SEVERITY_MEDIUM, "Service Account Token Automount Enabled",
                             f"ServiceAccount '{name}' in namespace '{ns}' has automountServiceAccountToken enabled (or default). Tokens might be mounted unnecessarily in pods using this SA.",
                             "Set automountServiceAccountToken: false on the ServiceAccount unless pods using it specifically need the token (prefer mounting projected tokens if needed).",
-                            "CIS 5.1.6", ns, name, "ServiceAccount")
+                            "CIS 5.1.6", ns, name, "ServiceAccount",
+                            check_id="k8s.serviceaccounts.token-automount")
             else:
                 add_finding(findings, SEVERITY_MEDIUM, "Default Service Account Allows Token Automount",
                             f"The 'default' ServiceAccount in namespace '{ns}' allows token automounting by default.",
                             "Explicitly set automountServiceAccountToken: false on the 'default' ServiceAccount and use dedicated SAs for pods.",
-                            "CIS 5.1.6", ns, name, "ServiceAccount")
+                            "CIS 5.1.6", ns, name, "ServiceAccount",
+                            check_id="k8s.serviceaccounts.default-token-automount")

@@ -9,7 +9,7 @@ import logging
 from collections import defaultdict
 from typing import List, Dict, Any, Set, Tuple, Optional
 
-from eks_scout.config import SEVERITY_CRITICAL, SEVERITY_HIGH, SEVERITY_MEDIUM
+from eks_scout.config import SEVERITY_CRITICAL, SEVERITY_HIGH, SEVERITY_MEDIUM, SEVERITY_RANK
 
 
 # Finding types that all indicate "container may run as root" —
@@ -51,6 +51,28 @@ BUILTIN_COMBINATIONS: List[Tuple[Set[str], str, str, str, str]] = [
         "Disable privileged mode (securityContext.privileged: false). Remove host "
         "network usage (hostNetwork: false). If host network is essential, ensure "
         "the container runs as non-root with strict NetworkPolicies.",
+    ),
+
+    # --- Critical: SYS_ADMIN capability + host access ---
+    (
+        {"Dangerous Capabilities Added", "Pod Using HostPath Volume"},
+        SEVERITY_CRITICAL,
+        "SYS_ADMIN Capability with Host Filesystem Access",
+        "SYS_ADMIN capability is effectively equivalent to privileged mode. Combined "
+        "with host path access, this creates a direct path for container escape and "
+        "host filesystem manipulation.",
+        "Remove SYS_ADMIN from capabilities.add. Drop ALL capabilities and only add "
+        "back specific ones required. Remove or replace hostPath volumes with "
+        "PersistentVolumes.",
+    ),
+    (
+        {"Dangerous Capabilities Added", "Pod Using Host Network"},
+        SEVERITY_CRITICAL,
+        "SYS_ADMIN Capability with Host Network Access",
+        "SYS_ADMIN capability combined with host network bypasses container isolation "
+        "on both privilege and network fronts, enabling full node compromise.",
+        "Remove SYS_ADMIN from capabilities.add. Remove host network usage. Use "
+        "standard networking and minimal capabilities.",
     ),
 
     # --- Critical/High: root + host access ---
@@ -260,7 +282,6 @@ def analyze_combinations(
     workload_groups = _group_findings_by_workload(findings)
 
     results = []
-    severity_rank = {SEVERITY_CRITICAL: 0, SEVERITY_HIGH: 1, SEVERITY_MEDIUM: 2}
 
     for workload_key, workload_findings in workload_groups.items():
         # Collect all finding types present on this workload
@@ -290,11 +311,11 @@ def analyze_combinations(
                 })
 
         # Sort combos for this workload by severity (most severe first)
-        workload_combos.sort(key=lambda c: severity_rank.get(c['risk_level'], 99))
+        workload_combos.sort(key=lambda c: SEVERITY_RANK.get(c['risk_level'], 99))
         results.extend(workload_combos)
 
     # Sort overall results: by severity, then workload key
-    results.sort(key=lambda c: (severity_rank.get(c['risk_level'], 99), c['workload_key']))
+    results.sort(key=lambda c: (SEVERITY_RANK.get(c['risk_level'], 99), c['workload_key']))
 
     if results:
         workload_count = len({r['workload_key'] for r in results})

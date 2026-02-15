@@ -12,6 +12,15 @@ SEVERITY_MEDIUM = "Medium"
 SEVERITY_LOW = "Low"
 SEVERITY_INFO = "Informational"
 
+# Severity ranking for comparison (lower = more severe)
+SEVERITY_RANK = {
+    SEVERITY_CRITICAL: 0,
+    SEVERITY_HIGH: 1,
+    SEVERITY_MEDIUM: 2,
+    SEVERITY_LOW: 3,
+    SEVERITY_INFO: 4,
+}
+
 # Try to import YAML support (optional dependency)
 try:
     import yaml

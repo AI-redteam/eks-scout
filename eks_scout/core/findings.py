@@ -250,7 +250,8 @@ class FindingManager:
 # Backwards compatibility function for legacy code
 def add_finding(findings_list: List[Dict], severity: str, finding_type: str,
                 details: str, recommendation: str, reference: str,
-                namespace: str, name: str, asset_type: str = "Kubernetes Resource"):
+                namespace: str, name: str, asset_type: str = "Kubernetes Resource",
+                check_id: Optional[str] = None):
     """
     Legacy add_finding function for backwards compatibility.
 
@@ -266,7 +267,13 @@ def add_finding(findings_list: List[Dict], severity: str, finding_type: str,
         namespace: Namespace or "(cluster)"
         name: Resource name
         asset_type: Asset type
+        check_id: Unique check identifier for severity overrides
     """
+    # Apply severity override if check_id is provided
+    if check_id:
+        config = get_config()
+        severity = config.get_severity(check_id, severity)
+
     finding = Finding(
         severity=severity,
         type=finding_type,
@@ -275,6 +282,7 @@ def add_finding(findings_list: List[Dict], severity: str, finding_type: str,
         reference=reference,
         namespace=namespace if namespace else "(cluster)",
         name=name,
-        asset_type=asset_type
+        asset_type=asset_type,
+        check_id=check_id
     )
     findings_list.append(finding.to_dict())

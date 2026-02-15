@@ -52,7 +52,23 @@ def run(findings, resources, config=None):
                               "Regularly review exposed services.")
             add_finding(findings, SEVERITY_MEDIUM, "Service Exposed via LoadBalancer",
                         details, recommendation,
-                        "Best Practice / Network Exposure", ns, name, "Service")
+                        "Best Practice / Network Exposure", ns, name, "Service",
+                        check_id="k8s.network_exposure.loadbalancer")
+
+        elif svc_type == 'NodePort':
+            ports = spec.get('ports', [])
+            node_ports = [str(p.get('nodePort', '?')) for p in ports if p.get('nodePort')]
+            port_list = [f"{p.get('port')}/{p.get('protocol', 'TCP')} -> nodePort {p.get('nodePort', '?')}" for p in ports]
+
+            details = (f"Service '{name}' in namespace '{ns}' is of Type NodePort, which exposes the service on every node's IP at port(s) {', '.join(node_ports) or 'auto-assigned'}. "
+                       f"Port mappings: {', '.join(port_list) or 'None defined'}. "
+                       "Any network client that can reach a node IP on these ports can access the service, bypassing ingress controllers and load balancer security groups.")
+            recommendation = ("Verify that NodePort exposure is intentional. Prefer using ClusterIP services with an Ingress controller or internal LoadBalancer for controlled access. "
+                              "If NodePort is required, ensure node security groups restrict access to the NodePort range (default 30000-32767) from trusted sources only.")
+            add_finding(findings, SEVERITY_MEDIUM, "Service Exposed via NodePort",
+                        details, recommendation,
+                        "Best Practice / Network Exposure", ns, name, "Service",
+                        check_id="k8s.network_exposure.nodeport")
 
     # Analyze Ingresses
     for ing in ingresses:
@@ -69,7 +85,8 @@ def run(findings, resources, config=None):
                 add_finding(findings, SEVERITY_LOW, "Ingress Uses Default Backend",
                             f"Ingress '{name}' in namespace '{ns}' defines a default backend but has no specific rules. All unmatched traffic will be routed here.",
                             "Ensure the default backend is intended and secured. Define specific rules for expected traffic.",
-                            "Best Practice / Configuration", ns, name, "Ingress")
+                            "Best Practice / Configuration", ns, name, "Ingress",
+                            check_id="k8s.network_exposure.ingress-default-backend")
             continue
 
         for rule_idx, rule in enumerate(rules):
@@ -81,7 +98,8 @@ def run(findings, resources, config=None):
                 recommendation = "Avoid using wildcard hosts in Ingress rules if possible. Use specific hostnames to ensure predictable routing and isolation."
                 add_finding(findings, SEVERITY_LOW, "Ingress Rule Uses Wildcard Host",
                             details, recommendation,
-                            "Best Practice / Configuration", ns, name, "Ingress")
+                            "Best Practice / Configuration", ns, name, "Ingress",
+                            check_id="k8s.network_exposure.ingress-wildcard-host")
 
             if host and host != '*' and host not in tls_hosts:
                 details = (f"Ingress '{name}' in namespace '{ns}' rule #{rule_idx+1} defines host '{host}' but this host is not included in any entry under spec.tls. "
@@ -90,4 +108,5 @@ def run(findings, resources, config=None):
                                   "Ensure HTTPS is enforced, potentially via Ingress controller annotations.")
                 add_finding(findings, SEVERITY_MEDIUM, "Ingress Rule Lacks TLS Configuration",
                             details, recommendation,
-                            "Best Practice / Encryption", ns, name, "Ingress")
+                            "Best Practice / Encryption", ns, name, "Ingress",
+                            check_id="k8s.network_exposure.ingress-no-tls")

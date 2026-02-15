@@ -5,6 +5,7 @@ import sys
 from datetime import datetime
 
 from eks_scout.scanner import scan
+from eks_scout.config import SEVERITY_RANK
 from eks_scout.reporting.csv_export import export_findings_to_csv
 from eks_scout.reporting.json_export import export_findings_to_json
 from eks_scout.reporting.console import print_summary
@@ -61,6 +62,18 @@ def cmd_scan(args):
         export_findings_to_csv(export_findings, output_file)
     elif args.output_format == 'json':
         export_findings_to_json(export_findings, output_file, combos=result.combos)
+
+    # CI/CD exit code gating
+    fail_on = getattr(args, 'fail_on', None)
+    if fail_on:
+        threshold = SEVERITY_RANK[fail_on.capitalize()]
+        for finding in result.findings:
+            finding_rank = SEVERITY_RANK.get(finding.get('severity', ''), 99)
+            if finding_rank <= threshold:
+                logging.error(f"Failing: found finding with severity '{finding['severity']}' "
+                              f"(threshold: {fail_on})")
+                sys.exit(2)
+        logging.info(f"No findings at or above '{fail_on}' severity. Exiting 0.")
 
 
 def cmd_init(args):
@@ -187,6 +200,8 @@ def main():
     scan_parser.add_argument("--show-suppressed", action="store_true",
                              help="Include suppressed findings in output with 'Suppressed' status")
     scan_parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+    scan_parser.add_argument("--fail-on", choices=['critical', 'high', 'medium', 'low'],
+                             help="Exit with code 2 if any finding meets or exceeds this severity (for CI/CD gating)")
 
     # --- init subcommand ---
     init_parser = subparsers.add_parser("init", help="Generate a default configuration file")

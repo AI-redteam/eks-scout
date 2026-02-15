@@ -3,19 +3,14 @@ import logging
 
 from eks_scout.config import (
     get_config, SEVERITY_CRITICAL, SEVERITY_HIGH, SEVERITY_MEDIUM,
-    SEVERITY_LOW, SEVERITY_INFO
+    SEVERITY_LOW, SEVERITY_INFO, SEVERITY_RANK
 )
 from eks_scout.core.findings import add_finding
-
-_SEVERITY_RANK = {
-    SEVERITY_CRITICAL: 0, SEVERITY_HIGH: 1, SEVERITY_MEDIUM: 2,
-    SEVERITY_LOW: 3, SEVERITY_INFO: 4,
-}
 
 
 def _max_severity(a, b):
     """Return the higher of two severity levels."""
-    return a if _SEVERITY_RANK.get(a, 99) <= _SEVERITY_RANK.get(b, 99) else b
+    return a if SEVERITY_RANK.get(a, 99) <= SEVERITY_RANK.get(b, 99) else b
 
 CHECK_NAME = "k8s.rbac"
 
@@ -72,7 +67,8 @@ def _analyze_cluster_role_bindings(findings, cluster_role_bindings, highly_privi
                 add_finding(findings, SEVERITY_HIGH, "ClusterRoleBinding Grants High Privileges",
                             f"ClusterRoleBinding '{crb_name}' grants highly privileged cluster role '{role_name}' to '{full_subject_name}'. Granting cluster-wide admin/edit rights is highly risky.",
                             "Avoid binding cluster-admin or similar roles directly. Use namespace-scoped roles (RoleBinding) or custom cluster roles with least privilege necessary.",
-                            "CIS 5.1.1", '(cluster)', crb_name, "ClusterRoleBinding")
+                            "CIS 5.1.1", '(cluster)', crb_name, "ClusterRoleBinding",
+                            check_id="k8s.rbac.cluster-admin-binding")
 
         # Check bindings to sensitive system groups/users
         sensitive_subjects = {
@@ -92,7 +88,8 @@ def _analyze_cluster_role_bindings(findings, cluster_role_bindings, highly_privi
                 add_finding(findings, SEVERITY_MEDIUM, "ClusterRoleBinding to Sensitive Subject",
                             f"ClusterRoleBinding '{crb_name}' grants cluster role '{role_name}' to potentially sensitive subject '{full_subject_name}'.",
                             "Review bindings to system groups and default service accounts, especially in kube-system. Ensure the granted role is appropriate and necessary.",
-                            "CIS 5.1.1 / Best Practice", '(cluster)', crb_name, "ClusterRoleBinding")
+                            "CIS 5.1.1 / Best Practice", '(cluster)', crb_name, "ClusterRoleBinding",
+                            check_id="k8s.rbac.sensitive-subject-binding")
 
 
 def _analyze_role_bindings(findings, role_bindings, highly_privileged_roles):
@@ -120,7 +117,8 @@ def _analyze_role_bindings(findings, role_bindings, highly_privileged_roles):
                 add_finding(findings, severity, finding_type,
                             f"RoleBinding '{rb_name}' in namespace '{ns}' grants {details_role_type} to {subject_kind} '{subject_name}'. This provides extensive control within the namespace (or cluster if cluster-admin).",
                             "Avoid binding cluster-admin via RoleBindings. Use custom, namespace-scoped Roles with least privilege instead of the built-in admin/edit roles where possible.",
-                            "CIS 5.1.1", ns, rb_name, "RoleBinding")
+                            "CIS 5.1.1", ns, rb_name, "RoleBinding",
+                            check_id="k8s.rbac.high-privilege-rolebinding")
 
         # Default service account bindings
         for subject in subjects:
@@ -128,7 +126,8 @@ def _analyze_role_bindings(findings, role_bindings, highly_privileged_roles):
                 add_finding(findings, SEVERITY_MEDIUM, "RoleBinding Involves Default Service Account",
                             f"RoleBinding '{rb_name}' in namespace '{ns}' grants role '{role_name}' (Kind: {role_kind}) to the 'default' ServiceAccount.",
                             "Avoid granting permissions to the 'default' service account. Create and use dedicated service accounts for applications with specific, minimal roles.",
-                            "CIS 5.1.3", ns, rb_name, "RoleBinding")
+                            "CIS 5.1.3", ns, rb_name, "RoleBinding",
+                            check_id="k8s.rbac.default-sa-binding")
 
 
 def _analyze_roles(findings, roles, cluster_roles, sensitive_verbs, sensitive_resources):
@@ -183,4 +182,5 @@ def _analyze_roles(findings, roles, cluster_roles, sensitive_verbs, sensitive_re
                     add_finding(findings, severity, "Role Contains Risky Permissions",
                                 details_str,
                                 f"Review the permissions granted by {role_type} '{role_name}', particularly rule {rule_idx+1}. Apply the principle of least privilege, avoiding wildcards and overly broad sensitive permissions.",
-                                "CIS 5.1.2", ns, role_name, role_type)
+                                "CIS 5.1.2", ns, role_name, role_type,
+                                check_id="k8s.rbac.risky-permissions")

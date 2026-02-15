@@ -46,7 +46,8 @@ def run(findings, resources, config=None):
         add_finding(findings, SEVERITY_INFO, "Nodegroup Configuration Info",
                     f"Nodegroup '{ng_name}': AMI Type '{ami_type}', Version '{version_info}', Instances '{','.join(instance_types)}', Node Role '{node_role_arn.split('/')[-1]}'.",
                     "Informational finding detailing the nodegroup configuration.",
-                    "N/A", '(cluster)', asset_name, asset_type)
+                    "N/A", '(cluster)', asset_name, asset_type,
+                    check_id="aws.nodegroups.config-info")
 
         # SSH Access
         if ec2_ssh_key:
@@ -54,17 +55,20 @@ def run(findings, resources, config=None):
                 add_finding(findings, SEVERITY_HIGH, "Nodegroup SSH Access Enabled Without Source Restriction",
                             f"Nodegroup '{ng_name}' has SSH access enabled via key '{ec2_ssh_key}' but does not restrict access to specific source Security Groups. This likely allows SSH access from any IP address with the key.",
                             "Define specific source Security Groups ('sourceSecurityGroups') for SSH access to restrict it to trusted bastion hosts or administrative networks. Alternatively, disable SSH access ('ec2SshKey: null') if not required.",
-                            "CIS 4.1.1", '(cluster)', asset_name, asset_type)
+                            "CIS 4.1.1", '(cluster)', asset_name, asset_type,
+                            check_id="aws.nodegroups.ssh-unrestricted")
             else:
                 add_finding(findings, SEVERITY_MEDIUM, "Nodegroup SSH Access Enabled",
                             f"Nodegroup '{ng_name}' has SSH access enabled via key '{ec2_ssh_key}', restricted to source Security Groups: {source_sgs}.",
                             "Ensure SSH access is necessary and the source security groups allow only minimal required access (e.g., from specific bastion IPs). Regularly rotate SSH keys and disable access if not actively needed.",
-                            "CIS 4.1.1", '(cluster)', asset_name, asset_type)
+                            "CIS 4.1.1", '(cluster)', asset_name, asset_type,
+                            check_id="aws.nodegroups.ssh-enabled")
         else:
             add_finding(findings, SEVERITY_INFO, "Nodegroup SSH Access Disabled",
                         f"Nodegroup '{ng_name}' does not have EC2 SSH key configured in its remote access settings.",
                         "Direct SSH access to nodes via the EKS nodegroup configuration is disabled. Verify launch template overrides if applicable.",
-                        "CIS 4.1.1", '(cluster)', asset_name, asset_type)
+                        "CIS 4.1.1", '(cluster)', asset_name, asset_type,
+                        check_id="aws.nodegroups.ssh-disabled")
 
         # Node IAM Role
         if node_role_arn:
@@ -72,10 +76,12 @@ def run(findings, resources, config=None):
             add_finding(findings, SEVERITY_INFO, "Nodegroup IAM Role Identified",
                         f"Nodegroup '{ng_name}' uses Node IAM role: {role_name} ({node_role_arn}).",
                         "Review policies attached (e.g., AmazonEKSWorkerNodePolicy, AmazonEC2ContainerRegistryReadOnly, AmazonEKS_CNI_Policy). Ensure no unnecessary permissions (e.g., broad EC2/S3 access). Consider deeper analysis if IAM permissions allow.",
-                        "AWS Best Practice / IAM", '(cluster)', asset_name, f"{asset_type} IAM Role")
+                        "AWS Best Practice / IAM", '(cluster)', asset_name, f"{asset_type} IAM Role",
+                        check_id="aws.nodegroups.iam-role")
 
         # IMDSv2 Check Placeholder
         add_finding(findings, SEVERITY_INFO, "IMDSv2 Check Recommended",
                     f"Nodegroup '{ng_name}': Manual check recommended for IMDSv2 enforcement.",
                     "Verify if IMDSv2 is enforced (MetadataHttpTokens=required) on the underlying EC2 instances to mitigate SSRF risks. Check the Launch Template used by the nodegroup or inspect a running instance if EC2 permissions are available.",
-                    "CIS 4.1.3", '(cluster)', asset_name, asset_type)
+                    "CIS 4.1.3", '(cluster)', asset_name, asset_type,
+                    check_id="aws.nodegroups.imdsv2")

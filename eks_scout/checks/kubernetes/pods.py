@@ -151,30 +151,35 @@ def _check_workload(findings, workload_info, sensitive_hostpaths, allowed_regist
             add_finding(findings, SEVERITY_HIGH, "Pod IRSA Role Potentially Overly Permissive",
                         f"{label} in namespace '{ns}' uses IAM role '{iam_role_arn}' which might have excessive permissions (contains 'admin' or '*').",
                         "Review and apply least privilege to the IAM role associated via IRSA.",
-                        "CIS 5.1.5", ns, finding_name, "Pod")
+                        "CIS 5.1.5", ns, finding_name, "Pod",
+                        check_id="k8s.pods.irsa-overly-permissive")
         add_finding(findings, SEVERITY_INFO, "Pod Using IRSA",
                     f"{label} in namespace '{ns}' uses IAM role via IRSA: {iam_role_arn}",
                     "Ensure the associated IAM role follows the principle of least privilege.",
-                    "AWS Best Practice", ns, finding_name, "Pod")
+                    "AWS Best Practice", ns, finding_name, "Pod",
+                    check_id="k8s.pods.irsa")
 
     # Host Network
     if spec.get('hostNetwork', False):
         add_finding(findings, SEVERITY_HIGH, "Pod Using Host Network",
                     f"{label} in namespace '{ns}' is configured with hostNetwork: true.",
                     "Avoid using hostNetwork. If required, isolate the node.",
-                    "CIS 5.2.4", ns, finding_name, "Pod")
+                    "CIS 5.2.4", ns, finding_name, "Pod",
+                    check_id="k8s.pods.host-network")
 
     # Host PID/IPC
     if spec.get('hostPID', False):
         add_finding(findings, SEVERITY_MEDIUM, "Pod Using Host PID Namespace",
                     f"{label} in namespace '{ns}' is configured with hostPID: true.",
                     "Avoid using hostPID unless essential.",
-                    "CIS 5.2.3", ns, finding_name, "Pod")
+                    "CIS 5.2.3", ns, finding_name, "Pod",
+                    check_id="k8s.pods.host-pid")
     if spec.get('hostIPC', False):
         add_finding(findings, SEVERITY_MEDIUM, "Pod Using Host IPC Namespace",
                     f"{label} in namespace '{ns}' is configured with hostIPC: true.",
                     "Avoid using hostIPC unless essential.",
-                    "CIS 5.2.2", ns, finding_name, "Pod")
+                    "CIS 5.2.2", ns, finding_name, "Pod",
+                    check_id="k8s.pods.host-ipc")
 
     # HostPath Volumes
     if spec.get('volumes'):
@@ -191,7 +196,8 @@ def _check_workload(findings, workload_info, sensitive_hostpaths, allowed_regist
                 add_finding(findings, severity, "Pod Using HostPath Volume",
                             details,
                             "Avoid hostPath volumes. If necessary, use readOnly mounts and specific paths. Consider alternatives like PVs.",
-                            "CIS 5.2.1", ns, finding_name, "Pod")
+                            "CIS 5.2.1", ns, finding_name, "Pod",
+                            check_id="k8s.pods.hostpath-volume")
 
     # Container checks
     containers = spec.get('containers', []) + spec.get('initContainers', [])
@@ -214,7 +220,8 @@ def _check_container(findings, container, pod_spec, ns, workload_name, workload_
         add_finding(findings, SEVERITY_CRITICAL, "Privileged Container",
                     f"Container '{c_name}' in {workload_label} (namespace '{ns}') is running in privileged mode.",
                     "Do not run privileged containers. Refactor the application if possible.",
-                    "CIS 5.2.5", ns, full_name, "Container")
+                    "CIS 5.2.5", ns, full_name, "Container",
+                    check_id="k8s.pods.privileged")
 
     # Run as Root — check container-level first, fall back to pod-level
     run_as_non_root = c_sc.get('runAsNonRoot', pod_sc.get('runAsNonRoot'))
@@ -224,17 +231,20 @@ def _check_container(findings, container, pod_spec, ns, workload_name, workload_
         add_finding(findings, SEVERITY_MEDIUM, "Container Running As Root",
                     f"Container '{c_name}' in {workload_label} (namespace '{ns}') is explicitly configured to run as root (runAsUser: 0).",
                     "Configure container's securityContext with runAsNonRoot: true and specify a runAsUser > 0.",
-                    "CIS 5.2.6", ns, full_name, "Container")
+                    "CIS 5.2.6", ns, full_name, "Container",
+                    check_id="k8s.pods.running-as-root")
     elif run_as_non_root is False:
         add_finding(findings, SEVERITY_MEDIUM, "Container Allowed to Run As Root",
                     f"Container '{c_name}' in {workload_label} (namespace '{ns}') is explicitly allowed to run as root (runAsNonRoot: false).",
                     "Set securityContext.runAsNonRoot: true.",
-                    "CIS 5.2.6", ns, full_name, "Container")
+                    "CIS 5.2.6", ns, full_name, "Container",
+                    check_id="k8s.pods.allowed-run-as-root")
     elif run_as_non_root is None and run_as_user is None:
         add_finding(findings, SEVERITY_LOW, "Container May Run As Root",
                     f"Container '{c_name}' in {workload_label} (namespace '{ns}') has no runAsNonRoot or runAsUser specified (default allows root). Image may run as root.",
                     "Explicitly set securityContext.runAsNonRoot: true and specify a runAsUser > 0.",
-                    "CIS 5.2.6", ns, full_name, "Container")
+                    "CIS 5.2.6", ns, full_name, "Container",
+                    check_id="k8s.pods.may-run-as-root")
 
     # Missing Resource Limits
     resources = container.get('resources', {})
@@ -243,7 +253,8 @@ def _check_container(findings, container, pod_spec, ns, workload_name, workload_
         add_finding(findings, SEVERITY_LOW, "Container Missing Resource Limits",
                     f"Container '{c_name}' in {workload_label} (namespace '{ns}') lacks CPU and/or memory limits.",
                     "Define CPU and memory limits for all containers.",
-                    "CIS 5.5.1", ns, full_name, "Container")
+                    "CIS 5.5.1", ns, full_name, "Container",
+                    check_id="k8s.pods.missing-resource-limits")
 
     # AllowPrivilegeEscalation (container-level only; default is true)
     allow_privilege_escalation = c_sc.get('allowPrivilegeEscalation', True)
@@ -252,7 +263,34 @@ def _check_container(findings, container, pod_spec, ns, workload_name, workload_
         add_finding(findings, SEVERITY_MEDIUM, "Container Allows Privilege Escalation",
                     f"Container '{c_name}' in {workload_label} (namespace '{ns}') allows privilege escalation (allowPrivilegeEscalation is not set to false).",
                     "Set securityContext.allowPrivilegeEscalation: false.",
-                    "CIS 5.2.8", ns, full_name, "Container")
+                    "CIS 5.2.8", ns, full_name, "Container",
+                    check_id="k8s.pods.privilege-escalation")
+
+    # Linux Capabilities
+    capabilities = c_sc.get('capabilities', {})
+    added_caps = [c.upper() for c in capabilities.get('add', [])]
+    dropped_caps = [c.upper() for c in capabilities.get('drop', [])]
+
+    if added_caps:
+        sensitive_caps = config.get_setting('sensitive_capabilities',
+                                            ['SYS_ADMIN', 'NET_ADMIN', 'SYS_PTRACE', 'SYS_MODULE',
+                                             'DAC_READ_SEARCH', 'DAC_OVERRIDE', 'SYS_RAWIO', 'SYS_BOOT'])
+        dangerous = [c for c in added_caps if c in sensitive_caps]
+        if dangerous:
+            severity = SEVERITY_HIGH if 'SYS_ADMIN' in dangerous else SEVERITY_MEDIUM
+            add_finding(findings, severity, "Dangerous Capabilities Added",
+                        f"Container '{c_name}' in {workload_label} (namespace '{ns}') adds dangerous Linux capabilities: {dangerous}."
+                        + (" SYS_ADMIN is effectively equivalent to privileged mode." if 'SYS_ADMIN' in dangerous else ""),
+                        "Remove dangerous capabilities from securityContext.capabilities.add. Use the minimum capabilities required.",
+                        "CIS 5.2.9", ns, full_name, "Container",
+                        check_id="k8s.pods.dangerous-capabilities")
+
+    if 'ALL' not in dropped_caps:
+        add_finding(findings, SEVERITY_LOW, "Capabilities Not Dropped",
+                    f"Container '{c_name}' in {workload_label} (namespace '{ns}') does not drop all Linux capabilities (capabilities.drop does not include 'ALL').",
+                    "Set securityContext.capabilities.drop: ['ALL'] and only add back the specific capabilities required.",
+                    "CIS 5.2.9", ns, full_name, "Container",
+                    check_id="k8s.pods.capabilities-not-dropped")
 
     # ReadOnly Root Filesystem (container-level only; default is false)
     read_only_root_filesystem = c_sc.get('readOnlyRootFilesystem', False)
@@ -261,7 +299,8 @@ def _check_container(findings, container, pod_spec, ns, workload_name, workload_
         add_finding(findings, SEVERITY_LOW, "Container Root Filesystem Writable",
                     f"Container '{c_name}' in {workload_label} (namespace '{ns}') does not have a read-only root filesystem.",
                     "Set securityContext.readOnlyRootFilesystem: true and use volumeMounts for writable directories.",
-                    "CIS 5.2.7", ns, full_name, "Container")
+                    "CIS 5.2.7", ns, full_name, "Container",
+                    check_id="k8s.pods.writable-root-fs")
 
     # Image Checks
     image = container.get('image', '')
@@ -269,11 +308,13 @@ def _check_container(findings, container, pod_spec, ns, workload_name, workload_
         add_finding(findings, SEVERITY_LOW, "Image Uses Latest Tag",
                     f"Container '{c_name}' in {workload_label} (namespace '{ns}') uses image '{image}' potentially with 'latest' tag or no tag.",
                     "Use specific, immutable image tags (e.g., git SHA or semantic version) instead of 'latest'.",
-                    "Best Practice", ns, full_name, "Container")
+                    "Best Practice", ns, full_name, "Container",
+                    check_id="k8s.pods.latest-tag")
 
     registry = image.split('/')[0] if '/' in image else 'docker.io'
     if '.' in registry and not any(allowed in registry for allowed in allowed_registries):
         add_finding(findings, SEVERITY_LOW, "Image From Potentially Unapproved Registry",
                     f"Container '{c_name}' in {workload_label} (namespace '{ns}') uses image '{image}' from a potentially non-standard registry ('{registry}').",
                     "Ensure images are pulled only from approved, trusted registries.",
-                    "Best Practice / Supply Chain", ns, full_name, "Container")
+                    "Best Practice / Supply Chain", ns, full_name, "Container",
+                    check_id="k8s.pods.unapproved-registry")

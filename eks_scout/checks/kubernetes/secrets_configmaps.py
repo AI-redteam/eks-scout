@@ -40,7 +40,8 @@ def run(findings, resources, config=None):
             add_finding(findings, SEVERITY_INFO, "Potentially Sensitive Secret Type Used",
                         f"Secret '{name}' in namespace '{ns}' has type '{secret_type}', which typically stores credentials or sensitive data.",
                         "Ensure access to this secret is tightly controlled via RBAC. Ensure applications retrieve specific keys if possible, rather than mounting the entire secret.",
-                        "Best Practice", ns, name, "Secret")
+                        "Best Practice", ns, name, "Secret",
+                        check_id="k8s.secrets_configmaps.sensitive-secret-type")
 
     for cm in configmaps:
         metadata = cm.get('metadata', {})
@@ -57,4 +58,5 @@ def run(findings, resources, config=None):
                 add_finding(findings, SEVERITY_MEDIUM, "Potential Sensitive Data in ConfigMap Keys",
                             f"ConfigMap '{name}' in namespace '{ns}' contains keys that suggest sensitive data might be stored insecurely: {found_sensitive_keys}. ConfigMaps are often less protected by RBAC than Secrets.",
                             "Do not store secrets or sensitive configuration (passwords, tokens, keys) in ConfigMaps. Use Kubernetes Secrets instead and ensure appropriate RBAC.",
-                            "CIS 5.4.1", ns, name, "ConfigMap")
+                            "CIS 5.4.1", ns, name, "ConfigMap",
+                            check_id="k8s.secrets_configmaps.sensitive-configmap-keys")
