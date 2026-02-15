@@ -47,19 +47,22 @@ def run(findings, resources, config=None):
 
             ingress_rules = spec.get('ingress', [])
             for rule_idx, rule in enumerate(ingress_rules):
-                from_rules = rule.get('from', [{}])
+                from_rules = rule.get('from')
+
+                # No 'from' field or empty list = allow all sources
+                if from_rules is None or from_rules == []:
+                    details = f"Policy '{policy_name}' (namespace '{ns}') ingress rule #{rule_idx+1} allows traffic from ALL sources (no 'from' clause)."
+                    add_finding(findings, SEVERITY_MEDIUM, "Network Policy Allows All Ingress Sources", details,
+                                "Specify podSelectors, namespaceSelectors, or restrictive ipBlocks in ingress rules to limit allowed sources based on least privilege.",
+                                "CIS 5.3.1", ns, policy_name, "NetworkPolicy")
+                    continue
 
                 for from_rule_idx, from_rule in enumerate(from_rules):
                     pod_selector_all = from_rule.get('podSelector') == {}
                     ns_selector_all = from_rule.get('namespaceSelector') == {}
                     ip_block_all = from_rule.get('ipBlock', {}).get('cidr') == '0.0.0.0/0'
 
-                    if not from_rule:
-                        details = f"Policy '{policy_name}' (namespace '{ns}') ingress rule #{rule_idx+1} allows traffic from ALL sources (empty 'from' clause)."
-                        add_finding(findings, SEVERITY_MEDIUM, "Network Policy Allows All Ingress Sources", details,
-                                    "Specify podSelectors, namespaceSelectors, or restrictive ipBlocks in ingress rules to limit allowed sources based on least privilege.",
-                                    "CIS 5.3.1", ns, policy_name, "NetworkPolicy")
-                    elif pod_selector_all:
+                    if pod_selector_all:
                         details = f"Policy '{policy_name}' (namespace '{ns}') ingress rule #{rule_idx+1}, from rule #{from_rule_idx+1}, allows traffic from ALL pods in selected namespaces (empty podSelector)."
                         add_finding(findings, SEVERITY_LOW, "Network Policy Allows Ingress From All Pods", details,
                                     "Specify labels in podSelectors to restrict allowed source pods.",

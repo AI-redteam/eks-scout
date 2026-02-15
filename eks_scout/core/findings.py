@@ -67,7 +67,6 @@ class FindingManager:
         - Automatic deduplication
         - Severity override application
         - Finding statistics and filtering
-        - Thread-safe append operations
     """
 
     def __init__(self):

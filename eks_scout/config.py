@@ -135,6 +135,11 @@ class Config:
                         else:
                             raise ValueError(f"Could not parse config file '{config_file}' as JSON or YAML")
 
+            # yaml.safe_load returns None for empty files
+            if config_data is None:
+                logging.warning(f"Config file '{config_file}' is empty. Using defaults.")
+                return
+
             # Overlay config file values on top of defaults
             if config_data.get('checks'):
                 self.checks_enabled.update(config_data['checks'])
@@ -238,7 +243,13 @@ class Config:
                 compiled_rule['namespace'] = rule['namespace']
             if 'name' in rule:
                 try:
-                    compiled_rule['name_pattern'] = re.compile(rule['name'])
+                    # Anchor the pattern so "app" matches exactly, not "my-app-deploy"
+                    pattern = rule['name']
+                    if not pattern.startswith('^'):
+                        pattern = '^' + pattern
+                    if not pattern.endswith('$'):
+                        pattern = pattern + '$'
+                    compiled_rule['name_pattern'] = re.compile(pattern)
                 except re.error as e:
                     logging.warning(f"Suppression rule #{i+1} has invalid regex '{rule['name']}': {e}")
                     continue

@@ -22,7 +22,7 @@ def check_dependencies(profile=None, context=None):
     """
     logging.info("Checking dependencies...")
 
-    kubectl_ok = run_cmd("kubectl version --client --short",
+    kubectl_ok = run_cmd("kubectl version --client -o json",
                          context=context, check_rc=False, suppress_error=True)
     if kubectl_ok is None:
         logging.error(
@@ -77,7 +77,9 @@ def build_metadata_map(resources: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     """Build a lookup map of resource metadata for suppression matching.
 
     Maps "namespace/name" -> metadata dict for all fetched K8s resources.
-    This enables label-based and annotation-based suppression.
+    For pods, also indexes by workload identity (Deployment/DaemonSet/StatefulSet
+    name inferred from ownerReferences) so that workload-level findings can
+    look up annotations from the underlying pods.
 
     Args:
         resources: Dict of fetched resources from fetch_resources().
@@ -85,11 +87,12 @@ def build_metadata_map(resources: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     Returns:
         Dict mapping resource key to metadata dict.
     """
+    import re
     metadata_map = {}
 
-    # K8s resource lists to index
+    # K8s resource lists to index (except pods, handled separately)
     resource_keys = [
-        'pods', 'service_accounts', 'services', 'ingresses',
+        'service_accounts', 'services', 'ingresses',
         'secrets', 'configmaps', 'namespaces',
         'roles', 'role_bindings', 'cluster_roles', 'cluster_role_bindings',
         'network_policies', 'resource_quotas', 'limit_ranges',
@@ -106,6 +109,39 @@ def build_metadata_map(resources: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
             if name:
                 lookup_key = f"{ns}/{name}" if ns != '(cluster)' else name
                 metadata_map[lookup_key] = metadata
+
+    # Index pods by both their actual name and their workload identity.
+    # Pod findings use workload names (e.g., "my-deploy" not "my-deploy-abc123-xyz"),
+    # so we need workload-keyed entries for suppression lookups to work.
+    for pod in resources.get('pods', []):
+        metadata = pod.get('metadata', {})
+        ns = metadata.get('namespace', '(cluster)')
+        pod_name = metadata.get('name', '')
+
+        if pod_name:
+            # Index by actual pod name
+            pod_key = f"{ns}/{pod_name}" if ns != '(cluster)' else pod_name
+            metadata_map[pod_key] = metadata
+
+            # Also index by workload identity (inferred from ownerReferences)
+            owner_refs = metadata.get('ownerReferences', [])
+            if owner_refs:
+                owner = owner_refs[0]
+                owner_kind = owner.get('kind', '')
+                owner_name = owner.get('name', '')
+
+                if owner_kind == 'ReplicaSet':
+                    deploy_name = re.sub(r'-[a-z0-9]{5,10}$', '', owner_name)
+                    workload_name = deploy_name if deploy_name != owner_name else owner_name
+                elif owner_kind in ('DaemonSet', 'StatefulSet', 'Job'):
+                    workload_name = owner_name
+                else:
+                    workload_name = owner_name
+
+                workload_key = f"{ns}/{workload_name}" if ns != '(cluster)' else workload_name
+                # Only set if not already present (first pod wins — they share templates)
+                if workload_key not in metadata_map:
+                    metadata_map[workload_key] = metadata
 
     return metadata_map
 

@@ -7,6 +7,16 @@ from eks_scout.config import (
 )
 from eks_scout.core.findings import add_finding
 
+_SEVERITY_RANK = {
+    SEVERITY_CRITICAL: 0, SEVERITY_HIGH: 1, SEVERITY_MEDIUM: 2,
+    SEVERITY_LOW: 3, SEVERITY_INFO: 4,
+}
+
+
+def _max_severity(a, b):
+    """Return the higher of two severity levels."""
+    return a if _SEVERITY_RANK.get(a, 99) <= _SEVERITY_RANK.get(b, 99) else b
+
 CHECK_NAME = "k8s.rbac"
 
 
@@ -48,7 +58,7 @@ def _analyze_cluster_role_bindings(findings, cluster_role_bindings, highly_privi
         crb_name = metadata.get('name')
         role_ref = crb.get('roleRef', {})
         role_name = role_ref.get('name')
-        subjects = crb.get('subjects', [])
+        subjects = crb.get('subjects') or []
 
         if role_name in highly_privileged_roles:
             for subject in subjects:
@@ -94,7 +104,7 @@ def _analyze_role_bindings(findings, role_bindings, highly_privileged_roles):
         role_ref = rb.get('roleRef', {})
         role_kind = role_ref.get('kind')
         role_name = role_ref.get('name')
-        subjects = rb.get('subjects', [])
+        subjects = rb.get('subjects') or []
 
         is_cluster_admin_binding = role_kind == "ClusterRole" and role_name == "cluster-admin"
         is_namespace_admin_binding = role_kind == "Role" and role_name in ["admin", "edit"]
@@ -162,10 +172,10 @@ def _analyze_roles(findings, roles, cluster_roles, sensitive_verbs, sensitive_re
                 if has_wildcard_verb or has_wildcard_resource or has_wildcard_group:
                     severity = SEVERITY_MEDIUM
                 if role_type == 'ClusterRole':
-                    severity = max(severity, SEVERITY_MEDIUM)
+                    severity = _max_severity(severity, SEVERITY_MEDIUM)
                 if any(v in ["impersonate", "bind", "escalate"] for v in verbs) or \
                    (any(v in ["create", "patch", "update"] for v in verbs) and "pods/exec" in resources):
-                    severity = max(severity, SEVERITY_HIGH)
+                    severity = _max_severity(severity, SEVERITY_HIGH)
 
                 is_extremely_permissive = has_wildcard_verb and has_wildcard_resource and has_wildcard_group
                 if not is_default_system_role or is_extremely_permissive:

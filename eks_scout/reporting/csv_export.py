@@ -38,7 +38,7 @@ def export_findings_to_csv(findings, filename="eks_findings_plextrac.csv"):
                 writer.writerow({
                     "Finding Name": finding['type'],
                     "Severity": finding['severity'],
-                    "Status": "Open",
+                    "Status": finding.get('status', 'Open'),
                     "Description": finding['details'],
                     "Recommendation": finding['recommendation'],
                     "Vulnerability References": finding['reference'],

@@ -31,6 +31,8 @@ def main():
     parser.add_argument("-f", "--output-format", choices=['csv', 'json'], default='csv',
                         help="Output format (csv or json)")
     parser.add_argument("--config", help="Path to configuration file (YAML or JSON)")
+    parser.add_argument("--show-suppressed", action="store_true",
+                        help="Include suppressed findings in output with 'Suppressed' status")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
 
     args = parser.parse_args()
@@ -51,6 +53,7 @@ def main():
         profile=args.profile,
         context=args.context,
         config_file=args.config,
+        show_suppressed=args.show_suppressed,
     )
 
     if result is None:
@@ -61,7 +64,7 @@ def main():
     duration = end_time - start_time
     logging.info(f"--- Scan Complete (duration: {duration}) ---")
 
-    if not result.findings:
+    if not result.findings and not result.suppressed:
         logging.info("No specific security issues found based on the current checks.")
         return
 

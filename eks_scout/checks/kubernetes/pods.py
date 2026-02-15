@@ -71,7 +71,7 @@ def _get_workload_identity(pod):
     if owner_kind == 'ReplicaSet':
         # Infer Deployment name by stripping the ReplicaSet hash suffix
         # ReplicaSet names follow pattern: <deployment-name>-<hash>
-        deploy_name = re.sub(r'-[a-f0-9]{5,10}$', '', owner_name)
+        deploy_name = re.sub(r'-[a-z0-9]{5,10}$', '', owner_name)
         if deploy_name != owner_name:
             return ("Deployment", deploy_name, ns)
         # If regex didn't match, it might be a standalone ReplicaSet
@@ -207,18 +207,18 @@ def _check_container(findings, container, pod_spec, ns, workload_name, workload_
     full_name = f"{workload_name}/{c_name}"
 
     pod_sc = pod_spec.get('securityContext', {})
-    container_sc = container.get('securityContext', pod_sc)
+    c_sc = container.get('securityContext', {})
 
-    # Privileged Container
-    if container_sc.get('privileged', False):
+    # Privileged Container (container-level only field)
+    if c_sc.get('privileged', False):
         add_finding(findings, SEVERITY_CRITICAL, "Privileged Container",
                     f"Container '{c_name}' in {workload_label} (namespace '{ns}') is running in privileged mode.",
                     "Do not run privileged containers. Refactor the application if possible.",
                     "CIS 5.2.5", ns, full_name, "Container")
 
-    # Run as Root
-    run_as_non_root = container_sc.get('runAsNonRoot')
-    run_as_user = container_sc.get('runAsUser')
+    # Run as Root — check container-level first, fall back to pod-level
+    run_as_non_root = c_sc.get('runAsNonRoot', pod_sc.get('runAsNonRoot'))
+    run_as_user = c_sc.get('runAsUser', pod_sc.get('runAsUser'))
 
     if run_as_user == 0:
         add_finding(findings, SEVERITY_MEDIUM, "Container Running As Root",
@@ -245,10 +245,8 @@ def _check_container(findings, container, pod_spec, ns, workload_name, workload_
                     "Define CPU and memory limits for all containers.",
                     "CIS 5.5.1", ns, full_name, "Container")
 
-    # AllowPrivilegeEscalation
-    ape_container = container.get('securityContext', {}).get('allowPrivilegeEscalation')
-    ape_pod = pod_spec.get('securityContext', {}).get('allowPrivilegeEscalation', True)
-    allow_privilege_escalation = ape_container if ape_container is not None else ape_pod
+    # AllowPrivilegeEscalation (container-level only; default is true)
+    allow_privilege_escalation = c_sc.get('allowPrivilegeEscalation', True)
 
     if allow_privilege_escalation:
         add_finding(findings, SEVERITY_MEDIUM, "Container Allows Privilege Escalation",
@@ -256,10 +254,8 @@ def _check_container(findings, container, pod_spec, ns, workload_name, workload_
                     "Set securityContext.allowPrivilegeEscalation: false.",
                     "CIS 5.2.8", ns, full_name, "Container")
 
-    # ReadOnly Root Filesystem
-    ro_container = container.get('securityContext', {}).get('readOnlyRootFilesystem')
-    ro_pod = pod_spec.get('securityContext', {}).get('readOnlyRootFilesystem', False)
-    read_only_root_filesystem = ro_container if ro_container is not None else ro_pod
+    # ReadOnly Root Filesystem (container-level only; default is false)
+    read_only_root_filesystem = c_sc.get('readOnlyRootFilesystem', False)
 
     if not read_only_root_filesystem:
         add_finding(findings, SEVERITY_LOW, "Container Root Filesystem Writable",

@@ -31,7 +31,7 @@ def run(findings, resources, config=None):
 
     for ng in nodegroups:
         ng_name = ng.get('nodegroupName')
-        node_role_arn = ng.get('nodeRole')
+        node_role_arn = ng.get('nodeRole', '')
         remote_access = ng.get('remoteAccess', {})
         ec2_ssh_key = remote_access.get('ec2SshKey') if remote_access else None
         source_sgs = remote_access.get('sourceSecurityGroups') if remote_access else []
