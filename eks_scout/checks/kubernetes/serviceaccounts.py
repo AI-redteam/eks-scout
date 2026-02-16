@@ -37,7 +37,7 @@ def run(findings, resources, config=None):
                 add_finding(findings, SEVERITY_HIGH, "Service Account IRSA Role Potentially Overly Permissive",
                             f"ServiceAccount '{name}' in namespace '{ns}' uses IAM role '{iam_role_arn}' which might have excessive permissions (contains 'admin' or '*').",
                             "Review and apply least privilege to the IAM role associated via IRSA.",
-                            "CIS 5.1.5", ns, name, "ServiceAccount",
+                            "AWS Best Practice", ns, name, "ServiceAccount",
                             check_id="k8s.serviceaccounts.irsa-overly-permissive")
             add_finding(findings, SEVERITY_INFO, "Service Account Using IRSA",
                         f"ServiceAccount '{name}' in namespace '{ns}' uses IAM role via IRSA: {iam_role_arn}",

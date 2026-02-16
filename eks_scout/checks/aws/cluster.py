@@ -50,13 +50,13 @@ def run(findings, resources, config=None):
             add_finding(findings, SEVERITY_HIGH, "EKS Public API Endpoint Open to Internet",
                         f"EKS cluster '{cluster_name}' API endpoint is publicly accessible from all IPs (0.0.0.0/0). This exposes the Kubernetes API server to the internet, increasing the attack surface.",
                         "Restrict public access CIDRs ('publicAccessCidrs') to a minimal set of trusted network ranges. If internal network access is sufficient, disable public access entirely and rely on the private endpoint.",
-                        "CIS 1.1.1", '(cluster)', cluster_name, "EKS Cluster",
+                        "CIS EKS 5.4.1", '(cluster)', cluster_name, "EKS Cluster",
                         check_id="aws.cluster.public-endpoint")
         else:
             add_finding(findings, SEVERITY_LOW, "EKS Public API Endpoint Access Enabled",
                         f"EKS cluster '{cluster_name}' API endpoint is publicly accessible from specific CIDRs: {public_cidrs}.",
                         "Ensure the allowed CIDRs are necessary, restricted to the minimum required ranges, and regularly reviewed. Prefer using the private endpoint ('endpointPrivateAccess: true') where possible.",
-                        "CIS 1.1.1", '(cluster)', cluster_name, "EKS Cluster",
+                        "CIS EKS 5.4.1", '(cluster)', cluster_name, "EKS Cluster",
                         check_id="aws.cluster.public-endpoint-restricted")
 
     if not private_access and not public_access:
@@ -69,7 +69,7 @@ def run(findings, resources, config=None):
         add_finding(findings, SEVERITY_MEDIUM, "EKS Private API Endpoint Access Disabled",
                     f"EKS cluster '{cluster_name}' does not have private API endpoint access enabled. Access relies solely on the public endpoint, preventing access from within the VPC without traversing public internet paths.",
                     "Enable private endpoint access ('endpointPrivateAccess: true') for improved security, network isolation, and potentially lower latency access from within the VPC.",
-                    "AWS Best Practice / Network Security", '(cluster)', cluster_name, "EKS Cluster",
+                    "CIS EKS 5.4.2", '(cluster)', cluster_name, "EKS Cluster",
                     check_id="aws.cluster.private-endpoint-disabled")
 
     # Control Plane Logging
@@ -86,13 +86,13 @@ def run(findings, resources, config=None):
         add_finding(findings, SEVERITY_MEDIUM, "EKS Control Plane Logging Disabled",
                     f"EKS cluster '{cluster_name}' does not have all recommended control plane log types enabled. Missing: {', '.join(missing_logs)}. This hinders security auditing, incident response, and operational troubleshooting.",
                     f"Enable all recommended control plane log types ({', '.join(required_logs)}) in the cluster's logging configuration to ensure comprehensive visibility into control plane activities.",
-                    "CIS 1.1.2", '(cluster)', cluster_name, "EKS Cluster",
+                    "CIS EKS 2.1.1", '(cluster)', cluster_name, "EKS Cluster",
                     check_id="aws.cluster.logging-disabled")
     else:
         add_finding(findings, SEVERITY_INFO, "EKS Control Plane Logging Enabled",
                     f"EKS cluster '{cluster_name}' has all recommended control plane log types enabled ({', '.join(required_logs)}).",
                     "Ensure these logs (especially audit logs) are being ingested, monitored, and retained appropriately in CloudWatch Logs or a dedicated SIEM system.",
-                    "CIS 1.1.2", '(cluster)', cluster_name, "EKS Cluster",
+                    "CIS EKS 2.1.1", '(cluster)', cluster_name, "EKS Cluster",
                     check_id="aws.cluster.logging-enabled")
 
     # Secrets Encryption
@@ -112,19 +112,19 @@ def run(findings, resources, config=None):
         add_finding(findings, SEVERITY_HIGH, "EKS Secrets Encryption Not Enabled",
                     f"EKS cluster '{cluster_name}' does not have envelope encryption for Kubernetes secrets enabled using a KMS key. Secrets are stored base64 encoded but unencrypted at rest in etcd.",
                     "Enable envelope encryption using a customer-managed KMS key to protect Kubernetes secrets at rest in the underlying etcd datastore.",
-                    "CIS 1.1.3", '(cluster)', cluster_name, "EKS Cluster",
+                    "CIS EKS 5.3.1", '(cluster)', cluster_name, "EKS Cluster",
                     check_id="aws.cluster.secrets-not-encrypted")
     elif not secrets_resource_encrypted:
         add_finding(findings, SEVERITY_HIGH, "EKS Secrets Resource Not Explicitly Encrypted",
                     f"EKS cluster '{cluster_name}' has envelope encryption configured with KMS key '{kms_key_arn}', but the 'secrets' resource is not explicitly listed in the encryption configuration's resources.",
                     "Ensure the 'secrets' resource type is included in the 'resources' list within the EKS encryptionConfig to guarantee secrets are encrypted at rest.",
-                    "CIS 1.1.3", '(cluster)', cluster_name, "EKS Cluster",
+                    "CIS EKS 5.3.1", '(cluster)', cluster_name, "EKS Cluster",
                     check_id="aws.cluster.secrets-resource-not-encrypted")
     else:
         add_finding(findings, SEVERITY_INFO, "EKS Secrets Encryption Enabled",
                     f"EKS cluster '{cluster_name}' has envelope encryption enabled for secrets using KMS key: {kms_key_arn}.",
                     "Ensure the KMS key policy follows the principle of least privilege and that key rotation is considered.",
-                    "CIS 1.1.3", '(cluster)', cluster_name, "EKS Cluster",
+                    "CIS EKS 5.3.1", '(cluster)', cluster_name, "EKS Cluster",
                     check_id="aws.cluster.secrets-encrypted")
 
     # Cluster IAM Role Analysis

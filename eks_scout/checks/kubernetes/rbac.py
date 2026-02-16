@@ -99,7 +99,7 @@ def _analyze_cluster_role_bindings(findings, cluster_role_bindings, highly_privi
                 add_finding(findings, severity, "ClusterRoleBinding Involves Default Service Account",
                             f"ClusterRoleBinding '{crb_name}' grants cluster role '{role_name}' to the 'default' ServiceAccount in namespace '{subject_ns}'. All pods without an explicit SA in that namespace inherit these cluster-wide permissions.",
                             "Avoid granting permissions to the 'default' service account. Create and use dedicated service accounts for applications with specific, minimal roles.",
-                            "CIS 5.1.3", '(cluster)', crb_name, "ClusterRoleBinding",
+                            "CIS 5.1.5", '(cluster)', crb_name, "ClusterRoleBinding",
                             check_id="k8s.rbac.default-sa-clusterrolebinding")
 
 
@@ -137,7 +137,7 @@ def _analyze_role_bindings(findings, role_bindings, highly_privileged_roles):
                 add_finding(findings, SEVERITY_MEDIUM, "RoleBinding Involves Default Service Account",
                             f"RoleBinding '{rb_name}' in namespace '{ns}' grants role '{role_name}' (Kind: {role_kind}) to the 'default' ServiceAccount.",
                             "Avoid granting permissions to the 'default' service account. Create and use dedicated service accounts for applications with specific, minimal roles.",
-                            "CIS 5.1.3", ns, rb_name, "RoleBinding",
+                            "CIS 5.1.5", ns, rb_name, "RoleBinding",
                             check_id="k8s.rbac.default-sa-binding")
 
 
@@ -193,5 +193,5 @@ def _analyze_roles(findings, roles, cluster_roles, sensitive_verbs, sensitive_re
                     add_finding(findings, severity, "Role Contains Risky Permissions",
                                 details_str,
                                 f"Review the permissions granted by {role_type} '{role_name}', particularly rule {rule_idx+1}. Apply the principle of least privilege, avoiding wildcards and overly broad sensitive permissions.",
-                                "CIS 5.1.2", ns, role_name, role_type,
+                                "CIS 5.1.3", ns, role_name, role_type,
                                 check_id="k8s.rbac.risky-permissions")

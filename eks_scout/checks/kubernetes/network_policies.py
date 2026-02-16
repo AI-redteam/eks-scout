@@ -55,7 +55,7 @@ def run(findings, resources, config=None):
                     details = f"Policy '{policy_name}' (namespace '{ns}') ingress rule #{rule_idx+1} allows traffic from ALL sources (no 'from' clause)."
                     add_finding(findings, SEVERITY_MEDIUM, "Network Policy Allows All Ingress Sources", details,
                                 "Specify podSelectors, namespaceSelectors, or restrictive ipBlocks in ingress rules to limit allowed sources based on least privilege.",
-                                "CIS 5.3.1", ns, policy_name, "NetworkPolicy",
+                                "CIS 5.3.2", ns, policy_name, "NetworkPolicy",
                                 check_id="k8s.network_policies.ingress-allow-all")
                     continue
 
@@ -68,19 +68,19 @@ def run(findings, resources, config=None):
                         details = f"Policy '{policy_name}' (namespace '{ns}') ingress rule #{rule_idx+1}, from rule #{from_rule_idx+1}, allows traffic from ALL pods in selected namespaces (empty podSelector)."
                         add_finding(findings, SEVERITY_LOW, "Network Policy Allows Ingress From All Pods", details,
                                     "Specify labels in podSelectors to restrict allowed source pods.",
-                                    "CIS 5.3.1", ns, policy_name, "NetworkPolicy",
+                                    "CIS 5.3.2", ns, policy_name, "NetworkPolicy",
                                     check_id="k8s.network_policies.ingress-all-pods")
                     elif ns_selector_all:
                         details = f"Policy '{policy_name}' (namespace '{ns}') ingress rule #{rule_idx+1}, from rule #{from_rule_idx+1}, allows traffic from ALL namespaces (empty namespaceSelector)."
                         add_finding(findings, SEVERITY_LOW, "Network Policy Allows Ingress From All Namespaces", details,
                                     "Specify labels in namespaceSelectors or specific podSelectors to restrict allowed source namespaces/pods.",
-                                    "CIS 5.3.1", ns, policy_name, "NetworkPolicy",
+                                    "CIS 5.3.2", ns, policy_name, "NetworkPolicy",
                                     check_id="k8s.network_policies.ingress-all-namespaces")
                     elif ip_block_all:
                         details = f"Policy '{policy_name}' (namespace '{ns}') ingress rule #{rule_idx+1}, from rule #{from_rule_idx+1}, allows traffic from ANY IP address (0.0.0.0/0)."
                         add_finding(findings, SEVERITY_MEDIUM, "Network Policy Allows Ingress From Any IP", details,
                                     "Restrict ipBlock CIDRs to only necessary source IP ranges. Avoid allowing from 0.0.0.0/0 if possible.",
-                                    "CIS 5.3.1", ns, policy_name, "NetworkPolicy",
+                                    "CIS 5.3.2", ns, policy_name, "NetworkPolicy",
                                     check_id="k8s.network_policies.ingress-any-ip")
 
             # Egress rule analysis

@@ -123,7 +123,7 @@ def _check_ingress_rule(findings, rule, sg_id, sg_name, asset_name,
         add_finding(findings, SEVERITY_HIGH, "Security Group Allows All Inbound Traffic",
                     f"Security group '{sg_id}' ({sg_name}) associated with cluster '{cluster_name}' allows ALL inbound traffic from {cidr_str}.",
                     "Restrict inbound rules to only required ports and source CIDRs.",
-                    "CIS 5.4.1 / Network Security", '(cluster)', asset_name, "Security Group",
+                    "CIS EKS 5.4.4", '(cluster)', asset_name, "Security Group",
                     check_id="aws.security_groups.open-all-traffic")
         return
 
@@ -137,7 +137,7 @@ def _check_ingress_rule(findings, rule, sg_id, sg_name, asset_name,
             add_finding(findings, severity, f"Security Group Exposes {desc} to Internet",
                         f"Security group '{sg_id}' ({sg_name}) allows inbound traffic on port {port} ({desc}) from {cidr_str}.",
                         f"Remove or restrict the inbound rule for port {port}. {desc} should not be exposed to the internet.",
-                        "CIS 5.4.1 / Network Security", '(cluster)', asset_name, "Security Group",
+                        "CIS EKS 5.4.4", '(cluster)', asset_name, "Security Group",
                         check_id=f"aws.security_groups.open-{port}")
 
     # Check etcd range (2379-2380)
@@ -153,5 +153,5 @@ def _check_ingress_rule(findings, rule, sg_id, sg_name, asset_name,
         add_finding(findings, SEVERITY_MEDIUM, "Security Group Exposes NodePort Range to Internet",
                     f"Security group '{sg_id}' ({sg_name}) allows inbound traffic on ports {overlap_start}-{overlap_end} (NodePort range) from {cidr_str}.",
                     "Restrict NodePort range access to known source CIDRs or use a LoadBalancer/Ingress controller instead of NodePort services.",
-                    "CIS 5.4.1 / Network Security", '(cluster)', asset_name, "Security Group",
+                    "CIS EKS 5.4.4", '(cluster)', asset_name, "Security Group",
                     check_id="aws.security_groups.open-nodeport-range")

@@ -73,11 +73,11 @@ def run(findings, resources, config=None):
             add_finding(findings, SEVERITY_MEDIUM, "PSA Label Missing",
                         f"Namespace '{ns_name}' lacks the 'pod-security.kubernetes.io/enforce' label.",
                         f"Apply Pod Security Admission labels to namespaces, enforcing at least the '{expected_level}' standard.",
-                        "CIS 1.5.1 / K8s Docs", ns_name, ns_name, "Namespace",
+                        "CIS 5.2.1", ns_name, ns_name, "Namespace",
                         check_id="k8s.namespaces.psa-missing")
         elif psa_enforce_label not in ['baseline', 'restricted']:
             add_finding(findings, SEVERITY_MEDIUM, "PSA Label Too Permissive",
                         f"Namespace '{ns_name}' has PSA enforce level '{psa_enforce_label}'. Expected '{expected_level}' or 'baseline'.",
                         "Ensure PSA enforce level is set to 'baseline' or preferably 'restricted'.",
-                        "CIS 1.5.1 / K8s Docs", ns_name, ns_name, "Namespace",
+                        "CIS 5.2.1", ns_name, ns_name, "Namespace",
                         check_id="k8s.namespaces.psa-permissive")

@@ -62,19 +62,19 @@ def run(findings, resources, config=None):
                 add_finding(findings, SEVERITY_HIGH, "Nodegroup SSH Access Enabled Without Source Restriction",
                             f"Nodegroup '{ng_name}' has SSH access enabled via key '{ec2_ssh_key}' but does not restrict access to specific source Security Groups. This likely allows SSH access from any IP address with the key.",
                             "Define specific source Security Groups ('sourceSecurityGroups') for SSH access to restrict it to trusted bastion hosts or administrative networks. Alternatively, disable SSH access ('ec2SshKey: null') if not required.",
-                            "CIS 4.1.1", '(cluster)', asset_name, asset_type,
+                            "CIS EKS 5.4.3", '(cluster)', asset_name, asset_type,
                             check_id="aws.nodegroups.ssh-unrestricted")
             else:
                 add_finding(findings, SEVERITY_MEDIUM, "Nodegroup SSH Access Enabled",
                             f"Nodegroup '{ng_name}' has SSH access enabled via key '{ec2_ssh_key}', restricted to source Security Groups: {source_sgs}.",
                             "Ensure SSH access is necessary and the source security groups allow only minimal required access (e.g., from specific bastion IPs). Regularly rotate SSH keys and disable access if not actively needed.",
-                            "CIS 4.1.1", '(cluster)', asset_name, asset_type,
+                            "CIS EKS 5.4.3", '(cluster)', asset_name, asset_type,
                             check_id="aws.nodegroups.ssh-enabled")
         else:
             add_finding(findings, SEVERITY_INFO, "Nodegroup SSH Access Disabled",
                         f"Nodegroup '{ng_name}' does not have EC2 SSH key configured in its remote access settings.",
                         "Direct SSH access to nodes via the EKS nodegroup configuration is disabled. Verify launch template overrides if applicable.",
-                        "CIS 4.1.1", '(cluster)', asset_name, asset_type,
+                        "CIS EKS 5.4.3", '(cluster)', asset_name, asset_type,
                         check_id="aws.nodegroups.ssh-disabled")
 
         # Node IAM Role
@@ -135,7 +135,7 @@ def _check_imdsv2(findings, ng, ng_name, asset_name, asset_type, profile, region
         add_finding(findings, SEVERITY_MEDIUM, "Nodegroup Missing Launch Template",
                     f"Nodegroup '{ng_name}' does not use a custom launch template. IMDSv2 enforcement cannot be verified and may not be configured.",
                     "Create a launch template with MetadataOptions.HttpTokens set to 'required' to enforce IMDSv2 and mitigate SSRF-based credential theft.",
-                    "CIS 4.1.3", '(cluster)', asset_name, asset_type,
+                    "AWS Best Practice", '(cluster)', asset_name, asset_type,
                     check_id="aws.nodegroups.imdsv2-not-enforced")
         return
 
@@ -158,7 +158,7 @@ def _check_imdsv2(findings, ng, ng_name, asset_name, asset_type, profile, region
         add_finding(findings, SEVERITY_INFO, "IMDSv2 Check Skipped",
                     f"Nodegroup '{ng_name}': Could not describe launch template '{lt_id}' (permission denied or not found). IMDSv2 status unknown.",
                     "Grant ec2:DescribeLaunchTemplateVersions permission to verify IMDSv2 enforcement.",
-                    "CIS 4.1.3", '(cluster)', asset_name, asset_type,
+                    "AWS Best Practice", '(cluster)', asset_name, asset_type,
                     check_id="aws.nodegroups.imdsv2-check-skipped")
         return
 
@@ -180,11 +180,11 @@ def _check_imdsv2(findings, ng, ng_name, asset_name, asset_type, profile, region
         add_finding(findings, SEVERITY_INFO, "IMDSv2 Enforced",
                     f"Nodegroup '{ng_name}' launch template enforces IMDSv2 (HttpTokens=required).",
                     "No action needed. IMDSv2 is correctly enforced.",
-                    "CIS 4.1.3", '(cluster)', asset_name, asset_type,
+                    "AWS Best Practice", '(cluster)', asset_name, asset_type,
                     check_id="aws.nodegroups.imdsv2-enforced")
     else:
         add_finding(findings, SEVERITY_HIGH, "IMDSv2 Not Enforced",
                     f"Nodegroup '{ng_name}' launch template has HttpTokens='{http_tokens or 'not set'}'. IMDSv1 is accessible, enabling SSRF-based credential theft from pods.",
                     "Update the launch template to set MetadataOptions.HttpTokens to 'required' to enforce IMDSv2.",
-                    "CIS 4.1.3", '(cluster)', asset_name, asset_type,
+                    "AWS Best Practice", '(cluster)', asset_name, asset_type,
                     check_id="aws.nodegroups.imdsv2-not-enforced")
