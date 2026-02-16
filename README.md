@@ -10,7 +10,7 @@
     \_____\/     \__\/\__\/     \_____\/                   \_____\/     \_____\/     \_____\/     \_____\/       \__\/
 ```
 
-**Version:** 2.0
+**by Ben Stevens** | **Version:** 2.0
 
 EKS Scout is a passive (read-only) security scanner for AWS EKS clusters. It uses `kubectl` and `aws` CLI to gather configuration data and identify security misconfigurations, vulnerabilities, and deviations from best practices.
 
@@ -21,6 +21,8 @@ Designed for security consultants, auditors, and internal security teams who nee
 - **Passive scanning** — Only read operations (`get`, `list`, `describe`). No changes to your cluster.
 - **Workload-level reporting** — Findings are grouped by Deployment/DaemonSet/StatefulSet, not individual pod replicas, eliminating duplicate noise.
 - **High-risk combination detection** — Identifies workloads where multiple findings create attack chains (e.g., privileged + hostPath = container escape).
+- **Cross-scope attack chain detection** — Maps infrastructure-to-workload attack paths (e.g., SCARLETEEL: host network + IMDSv1 = AWS credential theft).
+- **Interactive HTML report** — Self-contained HTML report with attack chain visualizations, severity dashboards, filtering, and CSV/JSON export.
 - **Configurable suppression** — Reduce false positives via YAML config rules or Kubernetes annotations.
 - **Plextrac-compatible CSV output** — Ready for import into Plextrac WriteupsDB.
 - **Zero dependencies** — Uses only the Python standard library (PyYAML optional for config files).
@@ -63,6 +65,9 @@ eks-scout scan --cluster-name prod-cluster --region us-east-1
 
 # With AWS profile and kubectl context
 eks-scout scan --cluster-name dev-cluster --region eu-west-1 --profile dev-account --context dev-eks
+
+# HTML report (default)
+eks-scout scan --cluster-name prod-cluster --region us-east-1 -f html -o report.html
 
 # JSON output
 eks-scout scan --cluster-name staging --region us-west-2 -f json -o findings.json
@@ -194,17 +199,49 @@ metadata:
 
 ## High-Risk Combination Detection
 
-EKS Scout automatically detects workloads where multiple findings combine to create elevated risk. For example:
+EKS Scout automatically detects workloads where multiple findings combine to create elevated risk (20 same-workload combos). For example:
 
 - **Privileged Container + HostPath Volume** (Critical) — Direct path for container escape and host compromise.
+- **SYS_ADMIN Capability + Host IPC** (Critical) — Kernel-level manipulation of host shared memory.
 - **Root Container + Host Network** (High) — Node network stack manipulation and Network Policy bypass.
+- **Host IPC + Host PID** (High) — See all processes and manipulate their shared memory.
 - **Root Container + Overpermissive IRSA Role** (High) — Application compromise leads directly to AWS resource abuse.
 
-These are reported in both the console summary and JSON output.
+## Cross-Scope Attack Chain Detection
+
+Beyond same-workload combos, EKS Scout detects 8 cross-scope attack chains where infrastructure-level weaknesses combine with pod-level findings to create cloud pivot paths:
+
+| Attack Chain | Severity | Description |
+|---|---|---|
+| **IMDS Credential Theft via Host Network** | Critical | Host network + IMDSv1 = steal node IAM creds (SCARLETEEL pattern) |
+| **IMDS Credential Theft via Privileged Container** | Critical | Privileged pod + IMDSv1 = cloud credential theft |
+| **Overprivileged Node Role + Container Escape** | Critical | Privileged container escapes to a node with broad AWS permissions |
+| **Unrestricted SSH + Overprivileged Node Role** | Critical | SSH brute force to node with broad IAM role |
+| **Overprivileged Node Role + Host Filesystem** | High | Read node IAM creds from disk via hostPath |
+| **Overprivileged Node Role + Host Network** | High | IMDS access + broad node role = AWS pivot |
+| **Public API + Cluster Admin Privileges** | High | Internet-exposed API + cluster-admin RBAC = full control |
+| **Unencrypted Secrets with Sensitive Data** | Medium | Secrets in plaintext etcd + sensitive keys detected |
+
+These are reported alongside same-workload combos in the HTML report with full attack chain visualizations.
+
+## HTML Report
+
+The HTML report (`-f html`) is a self-contained, interactive single-file report that includes:
+
+- **Severity dashboard** — Total findings, critical/high counts, and attack chain count at a glance.
+- **Severity donut chart** and **category bar chart** — Visual breakdown of findings.
+- **Interactive findings table** — Sortable, filterable by severity/namespace/asset type/category, with full-text search. Click any row to expand details.
+- **Attack chain visualizations** — Each high-risk combination and cross-scope attack chain renders as a visual kill-chain flow: Initial Access → Foothold → Escalation → Breakout → Attacker Goal.
+- **CSV/JSON export** — Download filtered findings as CSV or copy as JSON directly from the report.
+
+No external dependencies — the report works offline in any modern browser.
+
+See `eks_findings_plextrac.html` for an example report generated against a test lab.
 
 ## Output Formats
 
 - **CSV** (default) — Plextrac-compatible with columns: Finding Name, Severity, Status, Description, Recommendation, Vulnerability References, Affected Components, Tags.
+- **HTML** — Interactive single-file report with dashboards, attack chain visualizations, filtering, and export. See [HTML Report](#html-report) above.
 - **JSON** — Structured output including findings, summary statistics, and high-risk combinations.
 
 ## Plextrac Integration

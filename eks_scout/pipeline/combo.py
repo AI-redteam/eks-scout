@@ -184,6 +184,72 @@ BUILTIN_COMBINATIONS: List[Tuple[Set[str], str, str, str, str]] = [
         "Set readOnlyRootFilesystem: true and run as non-root. Use emptyDir or "
         "PersistentVolume mounts for required writable directories.",
     ),
+
+    # --- Critical: Host IPC + privilege ---
+    (
+        {"Privileged Container", "Pod Using Host IPC Namespace"},
+        SEVERITY_CRITICAL,
+        "Privileged Container with Host IPC Access",
+        "Privileged mode combined with host IPC namespace access allows direct "
+        "manipulation of host process shared memory segments, enabling data "
+        "exfiltration, process injection, and complete node compromise.",
+        "Remove privileged mode (securityContext.privileged: false). Remove host "
+        "IPC namespace (hostIPC: false). If IPC is essential, use non-root users "
+        "and minimal capabilities.",
+    ),
+    (
+        {"Dangerous Capabilities Added", "Pod Using Host IPC Namespace"},
+        SEVERITY_CRITICAL,
+        "SYS_ADMIN Capability with Host IPC Access",
+        "SYS_ADMIN capability combined with host IPC namespace allows kernel-level "
+        "manipulation of host shared memory, enabling process memory injection "
+        "and host process compromise.",
+        "Remove SYS_ADMIN from capabilities.add. Remove host IPC namespace "
+        "(hostIPC: false). Use minimal capabilities and standard IPC mechanisms.",
+    ),
+
+    # --- High: Host IPC + other host access ---
+    (
+        {"Pod Using Host IPC Namespace", ROOT_CANONICAL},
+        SEVERITY_HIGH,
+        "Root Container with Host IPC Access",
+        "Root privileges with host IPC namespace access allow attaching to host "
+        "shared memory segments as root, enabling manipulation of data shared "
+        "between host processes.",
+        "Run containers as non-root (runAsNonRoot: true, runAsUser: >0). Remove "
+        "host IPC namespace (hostIPC: false).",
+    ),
+    (
+        {"Pod Using Host IPC Namespace", "Pod Using Host PID Namespace"},
+        SEVERITY_HIGH,
+        "Host IPC with Host PID Visibility",
+        "Combined host IPC and host PID namespace access allows seeing all host "
+        "processes and manipulating their shared memory segments, enabling "
+        "process hijacking and data theft.",
+        "Remove host IPC namespace (hostIPC: false) and host PID namespace "
+        "(hostPID: false). Use standard container isolation.",
+    ),
+    (
+        {"Pod Using Host IPC Namespace", "Pod Using HostPath Volume"},
+        SEVERITY_HIGH,
+        "Host IPC with Host Filesystem Access",
+        "Host IPC namespace combined with host filesystem access allows reading "
+        "sensitive host files and exfiltrating data via shared memory channels, "
+        "bypassing network-level monitoring.",
+        "Remove host IPC namespace (hostIPC: false). Remove or replace hostPath "
+        "volumes with PersistentVolumes. If both are needed, use read-only mounts "
+        "and non-root users.",
+    ),
+    (
+        {"Pod Using Host IPC Namespace", "Pod Using Host Network"},
+        SEVERITY_HIGH,
+        "Host IPC with Host Network Access",
+        "Combined host IPC and host network access allows interaction with the "
+        "host on all channels — shared memory, network stack, and node services — "
+        "significantly collapsing container isolation.",
+        "Remove host IPC namespace (hostIPC: false) and host network "
+        "(hostNetwork: false). Use standard networking and IPC mechanisms.",
+    ),
 ]
 
 

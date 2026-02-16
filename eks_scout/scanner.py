@@ -8,6 +8,7 @@ from eks_scout.core.fetchers import KubernetesResourceFetcher, AWSResourceFetche
 from eks_scout.core.suppressions import filter_findings
 from eks_scout.checks import get_all_checks
 from eks_scout.pipeline.combo import analyze_combinations
+from eks_scout.pipeline.cross_scope_combo import analyze_cross_scope_combinations
 
 
 def check_dependencies(profile=None, context=None):
@@ -225,6 +226,8 @@ def scan(cluster_name, region, profile=None, context=None, config_file=None,
     logging.info("--- Analyzing Finding Combinations ---")
     custom_combos = config.get_setting('custom_combinations', None)
     combo_results = analyze_combinations(active_findings, custom_combinations=custom_combos)
+    cross_scope_results = analyze_cross_scope_combinations(active_findings)
+    combo_results = combo_results + cross_scope_results
 
     return ScanResult(
         findings=active_findings,
