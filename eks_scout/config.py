@@ -111,7 +111,23 @@ class Config:
                 "/proc",
                 "/root",
                 "/var/run/docker.sock"
-            ]
+            ],
+            "overly_broad_policies": [
+                "AdministratorAccess",
+                "PowerUserAccess",
+                "AmazonS3FullAccess",
+                "AmazonEC2FullAccess",
+                "SecretsManagerReadWrite",
+                "IAMFullAccess",
+                "AmazonDynamoDBFullAccess",
+                "AmazonRDSFullAccess"
+            ],
+            "high_severity_iam_policies": [
+                "AdministratorAccess",
+                "PowerUserAccess",
+                "IAMFullAccess"
+            ],
+            "nodeport_range": [30000, 32767]
         }
 
     def _load_config(self, config_file: str):

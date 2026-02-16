@@ -43,6 +43,19 @@ def run(findings, resources, config=None):
                         "Best Practice", ns, name, "Secret",
                         check_id="k8s.secrets_configmaps.sensitive-secret-type")
 
+        # Check Opaque secret data keys against sensitive patterns
+        if secret_type == 'Opaque':
+            data_keys = list(secret.get('data', {}).keys())
+            if data_keys:
+                found_sensitive_keys = [key for key in data_keys
+                                        if any(pattern in key.lower() for pattern in sensitive_key_patterns)]
+                if found_sensitive_keys:
+                    add_finding(findings, SEVERITY_MEDIUM, "Secret Contains Sensitive-Looking Keys",
+                                f"Secret '{name}' in namespace '{ns}' contains data keys that suggest sensitive data: {found_sensitive_keys}. Verify these are properly managed and rotated.",
+                                "Ensure secrets with sensitive data keys are tightly controlled via RBAC, rotated regularly, and not exposed unnecessarily.",
+                                "CIS 5.4.1", ns, name, "Secret",
+                                check_id="k8s.secrets_configmaps.sensitive-secret-keys")
+
     for cm in configmaps:
         metadata = cm.get('metadata', {})
         ns = metadata.get('namespace')

@@ -1,0 +1,2 @@
+[console_scripts]
+eks-scout = eks_scout.cli:main

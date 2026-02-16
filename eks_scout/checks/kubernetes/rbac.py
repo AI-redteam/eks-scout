@@ -91,6 +91,17 @@ def _analyze_cluster_role_bindings(findings, cluster_role_bindings, highly_privi
                             "CIS 5.1.1 / Best Practice", '(cluster)', crb_name, "ClusterRoleBinding",
                             check_id="k8s.rbac.sensitive-subject-binding")
 
+        # Default service account bindings (any namespace)
+        for subject in subjects:
+            if subject.get('kind') == "ServiceAccount" and subject.get('name') == "default":
+                subject_ns = subject.get('namespace', '(unknown)')
+                severity = SEVERITY_HIGH if role_name in highly_privileged_roles else SEVERITY_MEDIUM
+                add_finding(findings, severity, "ClusterRoleBinding Involves Default Service Account",
+                            f"ClusterRoleBinding '{crb_name}' grants cluster role '{role_name}' to the 'default' ServiceAccount in namespace '{subject_ns}'. All pods without an explicit SA in that namespace inherit these cluster-wide permissions.",
+                            "Avoid granting permissions to the 'default' service account. Create and use dedicated service accounts for applications with specific, minimal roles.",
+                            "CIS 5.1.3", '(cluster)', crb_name, "ClusterRoleBinding",
+                            check_id="k8s.rbac.default-sa-clusterrolebinding")
+
 
 def _analyze_role_bindings(findings, role_bindings, highly_privileged_roles):
     """Analyze RoleBindings for high-privilege and default SA bindings."""

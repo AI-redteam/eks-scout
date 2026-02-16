@@ -54,6 +54,8 @@ class KubernetesResourceFetcher:
             ("ingresses", ["get", "ingresses", "--all-namespaces", "-o", "json"], False),
             ("secrets", ["get", "secrets", "--all-namespaces", "-o", "json"], False),
             ("configmaps", ["get", "configmaps", "--all-namespaces", "-o", "json"], False),
+            ("cronjobs", ["get", "cronjobs", "--all-namespaces", "-o", "json"], False),
+            ("jobs", ["get", "jobs", "--all-namespaces", "-o", "json"], False),
             ("resource_quotas", ["get", "resourcequotas", "--all-namespaces", "-o", "json"], False),
             ("limit_ranges", ["get", "limitranges", "--all-namespaces", "-o", "json"], False),
         ]

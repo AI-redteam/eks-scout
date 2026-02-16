@@ -96,6 +96,7 @@ def build_metadata_map(resources: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
         'secrets', 'configmaps', 'namespaces',
         'roles', 'role_bindings', 'cluster_roles', 'cluster_role_bindings',
         'network_policies', 'resource_quotas', 'limit_ranges',
+        'cronjobs', 'jobs',
     ]
 
     for key in resource_keys:

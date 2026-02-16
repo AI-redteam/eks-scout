@@ -32,6 +32,8 @@ def run(findings, resources, config=None):
         config = get_config()
 
     pods = resources.get('pods', [])
+    jobs = resources.get('jobs', [])
+    cronjobs = resources.get('cronjobs', [])
 
     logging.info("Analyzing Pods...")
     sensitive_hostpaths = config.get_setting('sensitive_hostpaths',
@@ -39,21 +41,66 @@ def run(findings, resources, config=None):
     allowed_registries = config.get_setting('allowed_registries',
                                             ['amazonaws.com', 'docker.io', 'gcr.io', 'quay.io', 'ghcr.io', 'mcr.microsoft.com'])
 
+    # Build lookup maps for Job→CronJob ownership chain
+    jobs_by_name = {}
+    for job in jobs:
+        jmeta = job.get('metadata', {})
+        jns = jmeta.get('namespace', '')
+        jname = jmeta.get('name', '')
+        if jname:
+            jobs_by_name[f"{jns}/{jname}"] = job
+
     # Group pods by workload
-    workloads = _group_pods_by_workload(pods)
+    workloads = _group_pods_by_workload(pods, jobs_by_name)
 
     logging.info(f"Grouped {len(pods)} pods into {len(workloads)} workloads.")
 
+    covered_cronjobs = set()
     for workload_key, workload_info in workloads.items():
+        _check_workload(findings, workload_info, sensitive_hostpaths, allowed_registries, config)
+        if workload_info['kind'] == 'CronJob':
+            covered_cronjobs.add((workload_info['namespace'], workload_info['name']))
+
+    # Analyze CronJob templates that haven't run yet (no pods observed)
+    for cj in cronjobs:
+        cj_meta = cj.get('metadata', {})
+        cj_ns = cj_meta.get('namespace', '')
+        cj_name = cj_meta.get('name', '')
+
+        if (cj_ns, cj_name) in covered_cronjobs:
+            continue
+
+        pod_template = (cj.get('spec', {})
+                          .get('jobTemplate', {})
+                          .get('spec', {})
+                          .get('template', {}))
+        if not pod_template:
+            continue
+
+        synthetic_pod = {
+            'metadata': {**pod_template.get('metadata', {}), 'namespace': cj_ns, 'name': cj_name},
+            'spec': pod_template.get('spec', {}),
+        }
+        workload_info = {
+            'kind': 'CronJob',
+            'name': cj_name,
+            'namespace': cj_ns,
+            'pods': [synthetic_pod],
+            'pod_names': [f"{cj_name} (template)"],
+            'representative_pod': synthetic_pod,
+        }
         _check_workload(findings, workload_info, sensitive_hostpaths, allowed_registries, config)
 
 
-def _get_workload_identity(pod):
+def _get_workload_identity(pod, jobs_by_name=None):
     """Determine the workload that owns a pod using ownerReferences.
+
+    Follows the Job → CronJob ownership chain when jobs_by_name is provided.
 
     Returns:
         (workload_kind, workload_name, namespace) tuple.
         For pods owned by ReplicaSets, infers the Deployment name.
+        For pods owned by Jobs owned by CronJobs, returns the CronJob identity.
         For standalone pods, returns ("Pod", pod_name, namespace).
     """
     metadata = pod.get('metadata', {})
@@ -77,15 +124,30 @@ def _get_workload_identity(pod):
         # If regex didn't match, it might be a standalone ReplicaSet
         return ("ReplicaSet", owner_name, ns)
 
-    if owner_kind in ('DaemonSet', 'StatefulSet', 'Job'):
+    if owner_kind == 'Job':
+        # Follow Job → CronJob ownership chain
+        if jobs_by_name:
+            job = jobs_by_name.get(f"{ns}/{owner_name}")
+            if job:
+                job_owners = job.get('metadata', {}).get('ownerReferences', [])
+                if job_owners and job_owners[0].get('kind') == 'CronJob':
+                    return ("CronJob", job_owners[0].get('name', owner_name), ns)
+        return ("Job", owner_name, ns)
+
+    if owner_kind in ('DaemonSet', 'StatefulSet'):
         return (owner_kind, owner_name, ns)
 
     # Unknown owner kind — use it as-is
     return (owner_kind, owner_name, ns)
 
 
-def _group_pods_by_workload(pods):
+def _group_pods_by_workload(pods, jobs_by_name=None):
     """Group pods by their owning workload.
+
+    Args:
+        pods: List of pod dicts.
+        jobs_by_name: Optional dict mapping "namespace/name" -> job dict for
+                      following Job → CronJob ownership chains.
 
     Returns:
         Dict mapping (kind, name, namespace) -> {
@@ -100,7 +162,7 @@ def _group_pods_by_workload(pods):
     groups = defaultdict(lambda: {'pods': [], 'pod_names': []})
 
     for pod in pods:
-        workload_key = _get_workload_identity(pod)
+        workload_key = _get_workload_identity(pod, jobs_by_name)
         kind, name, ns = workload_key
 
         group = groups[workload_key]
@@ -291,6 +353,26 @@ def _check_container(findings, container, pod_spec, ns, workload_name, workload_
                     "Set securityContext.capabilities.drop: ['ALL'] and only add back the specific capabilities required.",
                     "CIS 5.2.9", ns, full_name, "Container",
                     check_id="k8s.pods.capabilities-not-dropped")
+
+    # Seccomp Profile — container-level overrides pod-level
+    c_seccomp = c_sc.get('seccompProfile')
+    pod_seccomp = pod_sc.get('seccompProfile')
+    effective_seccomp = c_seccomp if c_seccomp is not None else pod_seccomp
+
+    if effective_seccomp:
+        seccomp_type = effective_seccomp.get('type', '')
+        if seccomp_type == 'Unconfined':
+            add_finding(findings, SEVERITY_MEDIUM, "Seccomp Profile Unconfined",
+                        f"Container '{c_name}' in {workload_label} (namespace '{ns}') has seccomp profile set to 'Unconfined', disabling syscall filtering.",
+                        "Set securityContext.seccompProfile.type to 'RuntimeDefault' or 'Localhost' to restrict available syscalls.",
+                        "CIS 5.7.2", ns, full_name, "Container",
+                        check_id="k8s.pods.seccomp-unconfined")
+    else:
+        add_finding(findings, SEVERITY_LOW, "Seccomp Profile Not Set",
+                    f"Container '{c_name}' in {workload_label} (namespace '{ns}') does not have a seccomp profile configured. The container runtime default may or may not apply.",
+                    "Explicitly set securityContext.seccompProfile.type to 'RuntimeDefault' to ensure syscall filtering is active.",
+                    "CIS 5.7.2", ns, full_name, "Container",
+                    check_id="k8s.pods.seccomp-not-set")
 
     # ReadOnly Root Filesystem (container-level only; default is false)
     read_only_root_filesystem = c_sc.get('readOnlyRootFilesystem', False)
