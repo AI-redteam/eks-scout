@@ -15,6 +15,7 @@ from eks_scout.scanner import scan
 from eks_scout.config import SEVERITY_RANK
 from eks_scout.reporting.csv_export import export_findings_to_csv
 from eks_scout.reporting.json_export import export_findings_to_json
+from eks_scout.reporting.html_export import export_findings_to_html
 from eks_scout.reporting.console import print_summary
 from eks_scout.cli import BANNER
 
@@ -29,8 +30,8 @@ def main():
     parser.add_argument("--context", help="kubectl context to use")
     parser.add_argument("-o", "--output-file", default="eks_findings_plextrac.csv",
                         help="Output CSV file name")
-    parser.add_argument("-f", "--output-format", choices=['csv', 'json'], default='csv',
-                        help="Output format (csv or json)")
+    parser.add_argument("-f", "--output-format", choices=['csv', 'json', 'html'], default=None,
+                        help="Output format: csv, json, or html (default: csv + html)")
     parser.add_argument("--config", help="Path to configuration file (YAML or JSON)")
     parser.add_argument("--show-suppressed", action="store_true",
                         help="Include suppressed findings in output with 'Suppressed' status")
@@ -74,10 +75,29 @@ def main():
     print_summary(result.findings, suppressed_count=result.suppressed_count,
                   combos=result.combos, duration=duration)
 
-    if args.output_format == 'csv':
-        export_findings_to_csv(result.findings, args.output_file)
+    output_file = args.output_file
+    scan_metadata = {
+        'cluster_name': args.cluster_name,
+        'region': args.region,
+        'profile': args.profile or '',
+        'scan_time': end_time.strftime('%Y-%m-%d %H:%M:%S'),
+    }
+
+    if args.output_format is None:
+        # Default: emit both CSV and HTML
+        export_findings_to_csv(result.findings, output_file)
+        html_file = output_file.rsplit('.', 1)[0] + '.html' if '.' in output_file else output_file + '.html'
+        export_findings_to_html(result.findings, html_file,
+                                combos=result.combos, scan_metadata=scan_metadata)
+    elif args.output_format == 'csv':
+        export_findings_to_csv(result.findings, output_file)
     elif args.output_format == 'json':
-        export_findings_to_json(result.findings, args.output_file, combos=result.combos)
+        export_findings_to_json(result.findings, output_file, combos=result.combos)
+    elif args.output_format == 'html':
+        if output_file == 'eks_findings_plextrac.csv':
+            output_file = 'eks_scout_report.html'
+        export_findings_to_html(result.findings, output_file,
+                                combos=result.combos, scan_metadata=scan_metadata)
 
     # CI/CD exit code gating
     if args.fail_on:
